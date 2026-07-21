@@ -1,0 +1,22 @@
+{
+  "name": "@ai-content-os/worker",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/src/main.js",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/src/main.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run test/worker.spec.ts",
+    "test:integration": "vitest run test/queue.integration.spec.ts"
+  },
+  "dependencies": {
+    "@ai-content-os/config": "*",
+    "@ai-content-os/shared": "*",
+    "bullmq": "^5.66.4",
+    "ioredis": "^5.8.2",
+    "pino": "^10.1.0"
+  }
+}

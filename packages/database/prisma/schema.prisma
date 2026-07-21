@@ -1,0 +1,149 @@
+generator client {
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  moduleFormat  = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WebsitePlatform {
+  BLOGGER
+  WORDPRESS
+  OTHER
+}
+
+enum WebsiteStatus {
+  ACTIVE
+  INACTIVE
+  DRAFT
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum JobRecordStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String            @unique @db.VarChar(320)
+  displayName        String?           @map("display_name") @db.VarChar(120)
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspaceMembers   WorkspaceMember[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String            @db.VarChar(120)
+  slug         String            @unique @db.VarChar(100)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members      WorkspaceMember[]
+  websites     Website[]
+  settings     SystemSetting[]
+  auditLogs    AuditLog[]
+  jobRecords   JobRecord[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+model Website {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String          @map("workspace_id") @db.Uuid
+  name        String          @db.VarChar(160)
+  slug        String          @db.VarChar(120)
+  platform    WebsitePlatform
+  language    String          @db.VarChar(10)
+  timezone    String          @db.VarChar(64)
+  status      WebsiteStatus   @default(DRAFT)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs   AuditLog[]
+  jobRecords  JobRecord[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, status])
+  @@map("websites")
+}
+
+model SystemSetting {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String?   @map("workspace_id") @db.Uuid
+  key         String    @db.VarChar(120)
+  value       Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([key])
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String?    @map("workspace_id") @db.Uuid
+  websiteId   String?    @map("website_id") @db.Uuid
+  userId      String?    @map("user_id") @db.Uuid
+  action      String     @db.VarChar(120)
+  metadata    Json?
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  website     Website?   @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([websiteId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+model JobRecord {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalJobId String          @map("external_job_id") @db.VarChar(100)
+  queue         String          @db.VarChar(100)
+  name          String          @db.VarChar(120)
+  status        JobRecordStatus @default(WAITING)
+  correlationId String          @map("correlation_id") @db.Uuid
+  workspaceId   String?         @map("workspace_id") @db.Uuid
+  websiteId     String?         @map("website_id") @db.Uuid
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace     Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  website       Website?        @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+
+  @@unique([queue, externalJobId])
+  @@index([correlationId])
+  @@index([workspaceId, status])
+  @@index([websiteId, status])
+  @@map("job_records")
+}

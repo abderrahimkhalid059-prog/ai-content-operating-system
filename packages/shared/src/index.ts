@@ -23,6 +23,20 @@ export const ERROR_CODES = {
   forbidden: 'FORBIDDEN',
   internal: 'INTERNAL_ERROR',
   infrastructureUnavailable: 'INFRASTRUCTURE_UNAVAILABLE',
+  authInvalidCredentials: 'AUTH_INVALID_CREDENTIALS',
+  authSessionExpired: 'AUTH_SESSION_EXPIRED',
+  authSessionRevoked: 'AUTH_SESSION_REVOKED',
+  authPasswordChangeRequired: 'AUTH_PASSWORD_CHANGE_REQUIRED',
+  rateLimitExceeded: 'RATE_LIMIT_EXCEEDED',
+  userInactive: 'USER_INACTIVE',
+  userEmailConflict: 'USER_EMAIL_CONFLICT',
+  workspaceNotFound: 'WORKSPACE_NOT_FOUND',
+  workspaceAccessDenied: 'WORKSPACE_ACCESS_DENIED',
+  workspaceLastOwner: 'WORKSPACE_LAST_OWNER',
+  memberAlreadyExists: 'MEMBER_ALREADY_EXISTS',
+  memberRoleForbidden: 'MEMBER_ROLE_FORBIDDEN',
+  websiteSlugConflict: 'WEBSITE_SLUG_CONFLICT',
+  contentProfileDefaultConflict: 'CONTENT_PROFILE_DEFAULT_CONFLICT',
 } as const;
 
 export type CorrelationId = string;

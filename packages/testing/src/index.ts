@@ -10,7 +10,15 @@ export const TEST_ENVIRONMENT = {
   REDIS_HOST: 'localhost',
   REDIS_PORT: '6379',
   REDIS_PASSWORD: '',
-  JWT_SECRET: 'test-only-secret-at-least-thirty-two-characters',
+  JWT_ACCESS_SECRET: 'test-access-secret-at-least-thirty-two-characters',
+  JWT_ACCESS_TTL: '15m',
+  REFRESH_TOKEN_SECRET: 'test-refresh-secret-different-thirty-two-characters',
+  REFRESH_TOKEN_TTL: '7d',
+  AUTH_COOKIE_NAME: 'test_refresh',
+  AUTH_COOKIE_SECURE: 'false',
+  PASSWORD_MIN_LENGTH: '12',
+  LOGIN_RATE_LIMIT_WINDOW: '60s',
+  LOGIN_RATE_LIMIT_MAX: '10',
   LOG_LEVEL: 'silent',
   CORS_ORIGINS: 'http://localhost:5174',
   APP_URL: 'http://localhost:5174',
@@ -29,6 +37,6 @@ export const createTestRedis = (): Redis =>
 
 export async function cleanDatabase(execute: (sql: string) => Promise<unknown>): Promise<void> {
   await execute(
-    'TRUNCATE TABLE job_records, audit_logs, system_settings, websites, workspace_members, workspaces, users RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE content_profiles, sessions, job_records, audit_logs, system_settings, websites, workspace_members, workspaces, users RESTART IDENTITY CASCADE',
   );
 }

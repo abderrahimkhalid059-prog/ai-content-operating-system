@@ -2,7 +2,11 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  test: { environment: 'node', exclude: ['**/node_modules/**', '**/dist/**'] },
+  test: {
+    environment: 'node',
+    setupFiles: './test/environment.ts',
+    exclude: ['**/node_modules/**', '**/dist/**'],
+  },
   resolve: {
     alias: {
       '@ai-content-os/config': path.resolve(__dirname, '../../packages/config/src/index.ts'),

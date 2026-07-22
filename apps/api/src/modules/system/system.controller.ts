@@ -13,8 +13,10 @@ import type { EnvironmentConfig } from '@ai-content-os/config';
 import type { JobStatusResponse } from '@ai-content-os/contracts';
 import type { RequestWithId } from '../../common/middleware/request-id.middleware';
 import { QueueService } from '../../infrastructure/queue/queue.service';
+import { Public } from '../../common/decorators/auth.decorators';
 
 @ApiTags('system')
+@Public()
 @Controller({ path: 'system', version: '1' })
 export class SystemController {
   constructor(

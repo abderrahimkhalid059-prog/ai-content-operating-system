@@ -1,17 +1,67 @@
 import { PrismaPg } from '@prisma/adapter-pg';
+import { hash, verify, argon2id } from 'argon2';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { WebsitePlatform, WebsiteStatus, WorkspaceRole } from '../src/generated/prisma/enums';
+import {
+  ContentProfileStatus,
+  UserStatus,
+  WebsitePlatform,
+  WebsiteStatus,
+  WorkspaceRole,
+} from '../src/generated/prisma/enums';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL is required to seed the database.');
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('The development seed is disabled in production.');
+}
+
+const ownerEmail = (process.env.SEED_OWNER_EMAIL ?? 'developer@example.invalid')
+  .trim()
+  .toLowerCase();
+const ownerPassword = process.env.SEED_OWNER_PASSWORD;
+const passwordMinimum = Math.max(12, Number(process.env.PASSWORD_MIN_LENGTH ?? 12));
+if (!ownerPassword) throw new Error('SEED_OWNER_PASSWORD is required to seed the database.');
+if (
+  ownerPassword.length < passwordMinimum ||
+  !/[A-Za-z]/.test(ownerPassword) ||
+  !/\d/.test(ownerPassword)
+) {
+  throw new Error(
+    `SEED_OWNER_PASSWORD must contain at least ${passwordMinimum} characters, a letter, and a number.`,
+  );
+}
+const seedOwnerPassword: string = ownerPassword;
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 async function seed(): Promise<void> {
+  const existingUser = await prisma.user.findUnique({ where: { email: ownerEmail } });
+  const passwordAlreadyMatches =
+    existingUser?.passwordHash.startsWith('$argon2id$') === true &&
+    (await verify(existingUser.passwordHash, seedOwnerPassword));
+  const passwordHash = passwordAlreadyMatches
+    ? existingUser.passwordHash
+    : await hash(seedOwnerPassword, {
+        type: argon2id,
+        memoryCost: 65_536,
+        timeCost: 3,
+        parallelism: 1,
+      });
   const user = await prisma.user.upsert({
-    where: { email: 'developer@example.invalid' },
-    update: {},
-    create: { email: 'developer@example.invalid', displayName: 'Development User' },
+    where: { email: ownerEmail },
+    update: {
+      ...(passwordAlreadyMatches ? {} : { passwordHash, passwordChangedAt: new Date() }),
+      mustChangePassword: false,
+      status: UserStatus.ACTIVE,
+    },
+    create: {
+      email: ownerEmail,
+      displayName: 'Development Owner',
+      passwordHash,
+      passwordChangedAt: new Date(),
+      mustChangePassword: false,
+      status: UserStatus.ACTIVE,
+    },
   });
   const workspace = await prisma.workspace.upsert({
     where: { slug: 'development-workspace' },
@@ -23,7 +73,7 @@ async function seed(): Promise<void> {
     update: { role: WorkspaceRole.OWNER },
     create: { userId: user.id, workspaceId: workspace.id, role: WorkspaceRole.OWNER },
   });
-  await prisma.website.upsert({
+  const website = await prisma.website.upsert({
     where: { workspaceId_slug: { workspaceId: workspace.id, slug: 'sports-placeholder' } },
     update: {},
     create: {
@@ -35,6 +85,39 @@ async function seed(): Promise<void> {
       timezone: 'Africa/Casablanca',
       status: WebsiteStatus.DRAFT,
     },
+  });
+  await prisma.$transaction(async (transaction) => {
+    await transaction.contentProfile.updateMany({
+      where: { websiteId: website.id, isDefault: true },
+      data: { isDefault: false },
+    });
+    await transaction.contentProfile.upsert({
+      where: {
+        websiteId_name: {
+          websiteId: website.id,
+          name: 'Profil éditorial sportif arabe',
+        },
+      },
+      update: { isDefault: true, status: ContentProfileStatus.ACTIVE },
+      create: {
+        workspaceId: workspace.id,
+        websiteId: website.id,
+        name: 'Profil éditorial sportif arabe',
+        language: 'ar',
+        locale: 'ar-MA',
+        countryCode: 'MA',
+        tone: 'Journalisme sportif professionnel',
+        targetAudience: 'Lecteurs marocains intéressés par le football',
+        editorialRules: {
+          attributionRequired: true,
+          factualTone: true,
+          developmentOnly: true,
+        },
+        prohibitedTopics: [],
+        isDefault: true,
+        status: ContentProfileStatus.ACTIVE,
+      },
+    });
   });
 }
 

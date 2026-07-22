@@ -30,12 +30,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const status = exception instanceof HttpException ? exception.getStatus() : 500;
     const exceptionBody = exception instanceof HttpException ? exception.getResponse() : undefined;
     const details = this.details(exceptionBody);
+    const explicitCode = this.code(exceptionBody);
     const publicMessage =
       status === 500 ? 'Une erreur interne est survenue.' : this.message(exceptionBody, exception);
     const body: ApiErrorResponse = {
       success: false,
       error: {
-        code: codeByStatus[status] ?? ERROR_CODES.internal,
+        code: explicitCode ?? codeByStatus[status] ?? ERROR_CODES.internal,
         message: publicMessage,
         details,
         requestId: request.requestId ?? 'unknown',
@@ -54,6 +55,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       );
     }
     response.status(status).json(body);
+  }
+
+  private code(body: string | object | undefined): string | undefined {
+    if (!body || typeof body === 'string' || !('code' in body) || typeof body.code !== 'string') {
+      return undefined;
+    }
+    return body.code;
   }
 
   private message(body: string | object | undefined, exception: unknown): string {

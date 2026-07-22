@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { EnvironmentConfig } from '@ai-content-os/config';
 import { parseCorsOrigins } from '@ai-content-os/config';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService<EnvironmentConfig, true>);
 
   app.use(helmet());
+  app.use(cookieParser());
   app.enableCors({
     origin: parseCorsOrigins(config.get('CORS_ORIGINS', { infer: true })),
     credentials: true,
@@ -31,8 +33,14 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('AI Content Operating System API')
-    .setDescription('API d’infrastructure Phase 0')
-    .setVersion('0.1.0')
+    .setDescription('API Phase 1 — identité et cœur multi-site')
+    .setVersion('0.2.0')
+    .addBearerAuth()
+    .addCookieAuth('refreshCookie', {
+      type: 'apiKey',
+      in: 'cookie',
+      name: config.get('AUTH_COOKIE_NAME', { infer: true }),
+    })
     .build();
   SwaggerModule.setup('api/docs', app, () => SwaggerModule.createDocument(app, swaggerConfig));
 

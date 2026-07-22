@@ -38,11 +38,13 @@ module.exports = tseslint.config(
       'packages/database/prisma/seed.ts',
       'packages/database/test/relationships.integration.spec.ts',
       'packages/database/test/seed.integration.spec.ts',
+      'apps/api/test/phase1.integration.spec.ts',
     ],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
 );

@@ -14,7 +14,17 @@ x-app-environment: &app-environment
   REDIS_HOST: redis
   REDIS_PORT: 6379
   REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-  JWT_SECRET: ${JWT_SECRET:-development-only-placeholder-change-before-production-32chars}
+  JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-development-only-access-secret-change-before-production}
+  JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+  REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-development-only-refresh-secret-change-before-production}
+  REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-7d}
+  AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-ai_content_os_refresh}
+  AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+  PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+  LOGIN_RATE_LIMIT_WINDOW: ${LOGIN_RATE_LIMIT_WINDOW:-60s}
+  LOGIN_RATE_LIMIT_MAX: ${LOGIN_RATE_LIMIT_MAX:-10}
+  SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL:-developer@example.invalid}
+  SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
   APP_URL: ${APP_URL:-http://localhost:5173}

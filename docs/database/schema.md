@@ -1,22 +1,16 @@
-# Phase 0 database schema
+# Phase 1 database schema
 
-All identifiers are PostgreSQL UUIDs. Prisma model names use TypeScript conventions while tables and columns map consistently to `snake_case`.
+All identifiers are PostgreSQL UUIDs. Prisma uses TypeScript names while tables and columns map to `snake_case`. The additive `20260722120000_phase_1_identity_multisite` migration preserves Phase 0 history and maps legacy `MEMBER` memberships to `VIEWER`.
 
-- `users`: identity placeholder with unique email and optional display name; no password or authentication behavior.
-- `workspaces`: tenant boundary with a unique slug.
-- `workspace_members`: unique user/workspace membership with a minimal role enum.
-- `websites`: belongs to one workspace; contains name, workspace-scoped slug, platform, language, IANA timezone, and lifecycle status.
-- `system_settings`: JSON settings optionally scoped to a workspace. Secrets must not be stored as plain JSON values.
-- `audit_logs`: immutable-style event foundation with optional user, workspace, and website references.
-- `job_records`: durable reference foundation for external queue jobs; BullMQ/Redis remains the live queue-state store.
+- `users`: normalized unique email, Argon2id hash, `ACTIVE`/`INACTIVE`, forced-change flag, security version, login and password timestamps. Hashes are backend-only.
+- `sessions`: HMAC refresh verifier, family ID, expiry, use/revocation timestamps and bounded client metadata. Raw refresh tokens are never stored.
+- `workspaces`: tenant boundary, unique slug and activation state.
+- `workspace_members`: unique user/workspace membership and one of seven fixed roles.
+- `websites`: workspace-owned generic site configuration, locale/timezone/description, workspace-scoped slug, status and soft-deactivation timestamp. It contains no provider credentials.
+- `content_profiles`: website configuration with bounded JSON rules. A composite foreign key enforces website/workspace agreement; a partial unique index permits only one active default per website.
+- `audit_logs`: actor, tenant/resource target, action, request/correlation ID, IP/user-agent context and redacted metadata.
+- `system_settings` and `job_records`: preserved Phase 0 infrastructure foundations.
 
-Relationships:
+Session indexes cover `(user_id, revoked_at)`, expiry, and family. Tenant indexes cover membership, website status, content-profile status/default state, and audit chronology. Owner transitions, user deactivation/reset, workspace creation, and default-profile changes are transactional.
 
-```text
-User 1 ── * WorkspaceMember * ── 1 Workspace 1 ── * Website
-                                      ├── * SystemSetting
-                                      ├── * AuditLog
-                                      └── * JobRecord
-```
-
-`WebsitePlatform` supports `BLOGGER`, `WORDPRESS`, and `OTHER`; this is classification only, not an integration. `WebsiteStatus` supports `ACTIVE`, `INACTIVE`, and `DRAFT`. Indexes cover workspace membership, website status, audit timelines, correlations, and job status. Test databases must be isolated and disposable; set `TEST_DATABASE_URL` and never point cleanup utilities at shared or production data.
+Pre-Phase-1 users receive a non-login sentinel hash and `must_change_password=true`; an explicit development seed or authorized administrative reset must establish an Argon2id credential.

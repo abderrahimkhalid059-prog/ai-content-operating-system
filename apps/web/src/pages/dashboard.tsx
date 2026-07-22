@@ -1,38 +1,50 @@
+import { Link } from 'react-router-dom';
+import { useAuth } from '../auth/auth-context';
+
 export function DashboardPage(): React.JSX.Element {
+  const auth = useAuth();
   return (
     <section>
       <div className="page-heading">
         <div>
           <span className="eyebrow">Vue d’ensemble</span>
-          <h1>Tableau de bord</h1>
+          <h1>Bienvenue, {auth.user?.displayName ?? 'administrateur'}</h1>
         </div>
       </div>
       <div className="welcome-card">
-        <div className="welcome-icon">0</div>
+        <div className="welcome-icon">01</div>
         <div>
-          <h2>Fondation prête à être étendue</h2>
+          <h2>Votre plateforme multi-site est prête</h2>
           <p>
-            Les fonctionnalités métier seront ajoutées dans les prochaines phases. Cette console
-            présente uniquement l’infrastructure de base.
+            Sélectionnez un espace, gérez ses membres, ses sites et leurs profils éditoriaux depuis
+            une console isolée par tenant.
           </p>
         </div>
       </div>
       <div className="stat-grid">
-        <article>
-          <span>Sites configurés</span>
-          <strong>—</strong>
-          <small>Disponible en Phase 1</small>
-        </article>
-        <article>
-          <span>Traitements actifs</span>
-          <strong>—</strong>
-          <small>Aucun traitement métier</small>
-        </article>
-        <article>
-          <span>État plateforme</span>
-          <strong className="text-success">Fondation</strong>
-          <small>Contrôlez les dépendances système</small>
-        </article>
+        <Link className="panel linked-card" to="/espaces">
+          <div>
+            <span>Espaces accessibles</span>
+            <strong>{auth.user?.workspaces.length ?? 0}</strong>
+            <small>Changer de contexte en toute sécurité</small>
+          </div>
+        </Link>
+        {auth.selectedWorkspaceId && (
+          <Link className="panel linked-card" to={`/espaces/${auth.selectedWorkspaceId}/sites`}>
+            <div>
+              <span>Sites</span>
+              <strong>Gérer</strong>
+              <small>Configuration générique Phase 1</small>
+            </div>
+          </Link>
+        )}
+        <Link className="panel linked-card" to="/securite/sessions">
+          <div>
+            <span>Sécurité</span>
+            <strong>Sessions</strong>
+            <small>Consulter et révoquer vos accès</small>
+          </div>
+        </Link>
       </div>
     </section>
   );

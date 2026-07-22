@@ -1,21 +1,21 @@
-# Security baseline
+# Phase 1 security baseline
 
-## Secrets and configuration
+## Identity and passwords
 
-Server configuration is validated before startup. Real `.env` files are ignored, examples contain development-only placeholders, and the browser environment is limited to the non-secret `VITE_API_URL`. Production secrets must come from the deployment platform. The reserved JWT secret does not imply authentication exists.
+Passwords use Argon2id with 64 MiB memory, three iterations, and a configurable minimum of at least 12 characters including a letter and number. Plaintext, hashes, temporary passwords, Authorization headers, cookies, and authentication secrets are excluded from logs and audit metadata. Temporary passwords are generated randomly, returned only in the create/reset response, and require immediate change. Reset, deactivation, logout-all, and explicit revocation invalidate sessions.
 
-## Logging
+## Tokens and cookies
 
-Pino emits structured JSON with service and environment context. Authorization, cookies, password/token/secret/API-key fields, database URLs, and JWT secrets are redacted. Production errors use a generic message and never expose a stack trace through HTTP responses. Correlation fields are supported without logging request bodies by default.
+JWT access tokens default to 15 minutes and contain only `sub`, session ID, normalized email, and security version. The web client retains them only in memory. Opaque refresh tokens default to seven days, rotate on every use, and are represented in PostgreSQL only by a refresh-secret HMAC verifier. Reuse revokes the session family.
 
-## HTTP and networks
+The refresh cookie is HttpOnly, SameSite=Lax, scoped to `/api/v1/auth`, and mandatory-Secure in production. CORS is an explicit credentials-enabled allowlist. Access and refresh secrets must differ and must be rotated through the deployment secret store; rotating the access secret invalidates access JWTs, while rotating the refresh secret requires revoking active sessions.
 
-Helmet establishes API security headers, CORS is an explicit allowlist, validation rejects unknown DTO properties, and Nginx supplies proxy and baseline browser headers. The base Compose network keeps PostgreSQL and Redis internal; development exposes them on loopback only. TLS is a deployment concern and no fake certificate is shipped.
+## Authorization and tenant isolation
 
-## Dependencies and environments
+Every protected request validates the access token, live server session, user status, and security version. Workspace routes then validate active membership and current database role. All tenant-owned queries include workspace ID, and nested content profiles include both workspace and website IDs. Inaccessible workspace/resource IDs return safe 404 responses. Serializable ownership transactions prevent removing or demoting the last active Owner.
 
-The lockfile is validated with `npm ci` in CI. Dependency updates require normal review and automated quality gates. Development data and secrets are never suitable for production. Production should use separate databases, Redis instances, credentials, origins, and least-privilege network policies.
+## Abuse, audit, and errors
 
-## Future authentication
+Redis applies short-window login and refresh limits. Login failure is generic and uses an email fingerprint in audit metadata. Sensitive operations are audited with safe request context. Global errors preserve stable codes without production stack traces. Helmet, input whitelisting, unknown-field rejection, request IDs, structured redaction, loopback-only development infrastructure, and private Compose backend networking remain enabled.
 
-Phase 1 must define identity verification, session/token lifecycle, workspace authorization, rate limiting, audit coverage, secret encryption/rotation, and recovery processes before tenant features are exposed. Authentication and authorization are intentionally absent in Phase 0.
+MFA, recovery email, social login, custom roles, external provider credentials, and every Phase 2 integration remain deliberately deferred.

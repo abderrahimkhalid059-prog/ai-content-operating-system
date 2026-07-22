@@ -1,19 +1,29 @@
 import { randomUUID } from 'node:crypto';
-import { MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, RequestMethod, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { validateEnvironment } from '@ai-content-os/config';
+import { AccessTokenGuard } from './common/auth/access-token.guard';
+import { AuditModule } from './common/audit/audit.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { AuditApiModule } from './modules/audit/audit-api.module';
+import { ContentProfilesModule } from './modules/content-profiles/content-profiles.module';
 import { HealthModule } from './modules/health/health.module';
 import { SystemModule } from './modules/system/system.module';
+import { UsersModule } from './modules/users/users.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { WebsitesModule } from './modules/websites/websites.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, cache: true, validate: validateEnvironment }),
     LoggerModule.forRoot({
+      forRoutes: [{ path: '{*splat}', method: RequestMethod.ALL }],
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
         redact: {
@@ -26,7 +36,9 @@ import { SystemModule } from './modules/system/system.module';
             '*.secret',
             '*.apiKey',
             '*.DATABASE_URL',
-            '*.JWT_SECRET',
+            '*.JWT_ACCESS_SECRET',
+            '*.REFRESH_TOKEN_SECRET',
+            '*.SEED_OWNER_PASSWORD',
           ],
           censor: '[REDACTED]',
         },
@@ -46,12 +58,20 @@ import { SystemModule } from './modules/system/system.module';
     DatabaseModule,
     RedisModule,
     QueueModule,
+    AuditModule,
+    AuthModule,
+    AuditApiModule,
+    UsersModule,
+    WorkspacesModule,
+    WebsitesModule,
+    ContentProfilesModule,
     HealthModule,
     SystemModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: AccessTokenGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('*');
+    consumer.apply(RequestIdMiddleware).forRoutes('{*splat}');
   }
 }

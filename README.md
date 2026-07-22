@@ -1,13 +1,13 @@
 # AI Content Operating System
 
-Production-oriented Phase 0 foundation for a future multi-workspace, multi-website content operations SaaS. This repository deliberately contains infrastructure and application foundations only; it does not contain content-generation or publishing business logic.
+Production-oriented Phase 1 identity and multi-website core for a content operations SaaS. It includes secure private authentication, users, sessions, workspaces, fixed RBAC, tenant isolation, generic websites, and configuration-only content profiles. It deliberately contains no content-generation, OAuth, provider, or publishing logic.
 
 ## Architecture
 
 The project is a TypeScript npm-workspaces monorepo built as a modular monolith with three independently runnable processes:
 
-- `apps/api`: NestJS REST API with URI versioning, Swagger, validated configuration, redacted JSON logging, health probes, and development queue validation routes.
-- `apps/web`: French React/Vite administration shell using React Router and TanStack Query.
+- `apps/api`: NestJS REST API with rotating sessions, workspace authorization, tenant CRUD, Swagger, validated configuration, redacted JSON logging, health probes, and queue validation routes.
+- `apps/web`: French React/Vite administration application with memory-only access tokens, silent refresh, protected routes, workspace selection, and permission-aware management screens.
 - `apps/worker`: BullMQ worker for the infrastructure-only `system.health-check` job.
 - `packages/database`: Prisma 7 PostgreSQL client, schema, migration, seed, and lifecycle wrapper.
 - `packages/config`, `shared`, `contracts`, and `testing`: framework-neutral shared foundations.
@@ -36,7 +36,7 @@ The UI is available at `http://localhost:5173`, API health at `http://localhost:
 
 ## Environment variables
 
-All server variables are validated at startup. Required settings are `NODE_ENV`, `API_PORT`, `WEB_PORT`, `DATABASE_URL`, `REDIS_HOST`, `REDIS_PORT`, `JWT_SECRET` (reserved only; no JWT implementation), `LOG_LEVEL`, `CORS_ORIGINS`, `APP_URL`, and `API_URL`. `REDIS_PASSWORD` is optional for local development. The browser receives only `VITE_API_URL`; never expose secrets with a `VITE_` prefix.
+All server variables are validated at startup. Authentication requires distinct `JWT_ACCESS_SECRET` and `REFRESH_TOKEN_SECRET`, configurable access/refresh TTLs, cookie name/secure policy, password minimum, and login-rate window/max. Production requires secure cookies. `SEED_OWNER_EMAIL` and `SEED_OWNER_PASSWORD` are used only by the explicit development seed; the password is mandatory, never logged, and should remain in an ignored local environment file. The browser receives only `VITE_API_URL`; never expose secrets with a `VITE_` prefix.
 
 ## Commands
 
@@ -54,7 +54,7 @@ All server variables are validated at startup. Required settings are `NODE_ENV`,
 
 The committed Compose base does not publish PostgreSQL or Redis. `docker-compose.override.yml`, loaded automatically for development, binds them to localhost only. Production deployments should omit the override and provide secrets via the deployment environment.
 
-For an end-to-end container check, run `docker compose up -d --build --wait`, optionally load the development seed with `docker compose run --rm migrate npm run db:seed -w @ai-content-os/database`, then run `npm run validate:stack`. Compose applies committed migrations before starting the API and worker; the smoke test verifies the live stack, Swagger document, health probes, browser shell, and a BullMQ job processed by the real worker.
+For an end-to-end container check, export a local `SEED_OWNER_PASSWORD`, run `docker compose up -d --build --wait`, load the development seed with `docker compose run --rm migrate npm run db:seed -w @ai-content-os/database`, then run `npm run validate:stack`. Compose applies committed migrations before starting the API and worker. The validator checks the Phase 0 health/Swagger/web/BullMQ path plus login, refresh rotation, authenticated workspace access, Website CRUD, content profiles, and cross-tenant rejection.
 
 ## Infrastructure validation job
 
@@ -72,8 +72,8 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 0 scope
+## Phase 1 scope
 
-Implemented: monorepo foundations, strict TypeScript, API/web/worker shells, shared packages, PostgreSQL/Prisma schema, Redis/BullMQ test path, JSON logging, error handling, health probes, Swagger, Docker/Nginx, tests, CI, and documentation.
+Implemented: the complete Phase 0 foundation plus Argon2id authentication, rotating server sessions, user lifecycle/reset, multi-workspace membership, seven fixed roles, transactional last-Owner rules, tenant guards, generic Website CRUD, content-profile CRUD/default selection, sensitive audit events, French administration pages, and Docker-backed security/integration validation.
 
-Not implemented: authentication business logic, billing, AI providers or content generation, research, article workflows, Blogger OAuth, WordPress publishing, SEO, affiliates, analytics, final UI design, or production deployment. Development seed records are placeholders and are not production credentials or content.
+Not implemented: public registration, recovery email, MFA, social login, custom roles, billing, AI providers or content generation, research, article workflows, Blogger OAuth/API, WordPress publishing, SEO, affiliates, analytics, or production deployment. Development seed records are placeholders and are not production credentials or content.

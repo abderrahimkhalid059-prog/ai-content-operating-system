@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  BLOGGER_MODE: mock
+
 jobs:
   quality:
     runs-on: ubuntu-latest

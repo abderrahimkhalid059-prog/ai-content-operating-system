@@ -19,3 +19,17 @@ Every protected request validates the access token, live server session, user st
 Redis applies short-window login and refresh limits. Login failure is generic and uses an email fingerprint in audit metadata. Sensitive operations are audited with safe request context. Global errors preserve stable codes without production stack traces. Helmet, input whitelisting, unknown-field rejection, request IDs, structured redaction, loopback-only development infrastructure, and private Compose backend networking remain enabled.
 
 MFA, recovery email, social login, custom roles, external provider credentials, and every Phase 2 integration remain deliberately deferred.
+
+# Blogger integration controls
+
+- OAuth state is random, hashed at rest, bound to user/workspace/website/provider, short-lived and
+  atomically consumed once. Post-callback redirects are restricted to known French UI paths.
+- Live credentials use AES-256-GCM with random IV, authenticated tag and stored key version.
+- Client secrets, encryption keys, raw/cipher credentials, tokens and authorization codes are
+  excluded from contracts, audit metadata and Swagger, and redacted from API/Worker logs.
+- Every integration query repeats Workspace and Website predicates; composite foreign keys enforce
+  the same boundary in PostgreSQL.
+- Manual HTML rejects scripts, inline event handlers, JavaScript URLs, iframe/embed/object and
+  oversized payloads. Labels are bounded and normalized.
+- Public publish and delete fail closed unless their global server setting is explicitly enabled.
+- Provider errors are sanitized and classified before crossing API or durable diagnostic boundaries.

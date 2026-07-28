@@ -22,6 +22,18 @@ const allPermissions: Permission[] = [
   'contentProfiles.create',
   'contentProfiles.update',
   'contentProfiles.delete',
+  'integrations.read',
+  'integrations.connect',
+  'integrations.update',
+  'integrations.disconnect',
+  'integrations.test',
+  'integrations.sync',
+  'externalPosts.read',
+  'externalPosts.import',
+  'providerPublishing.createDraft',
+  'providerPublishing.update',
+  'providerPublishing.publish',
+  'providerPublishing.delete',
   'audit.read',
 ];
 
@@ -30,6 +42,8 @@ const readPermissions: Permission[] = [
   'members.read',
   'websites.read',
   'contentProfiles.read',
+  'integrations.read',
+  'externalPosts.read',
 ];
 
 export const ROLE_PERMISSIONS: Record<WorkspaceRoleContract, readonly Permission[]> = {
@@ -45,10 +59,15 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRoleContract, readonly Permission
     'contentProfiles.create',
     'contentProfiles.update',
     'contentProfiles.delete',
+    'integrations.test',
+    'integrations.sync',
+    'externalPosts.import',
+    'providerPublishing.createDraft',
+    'providerPublishing.update',
   ],
   [WorkspaceRole.REVIEWER]: readPermissions,
   [WorkspaceRole.SEO_MANAGER]: readPermissions,
-  [WorkspaceRole.WRITER]: readPermissions,
+  [WorkspaceRole.WRITER]: [...readPermissions, 'providerPublishing.createDraft'],
   [WorkspaceRole.VIEWER]: readPermissions,
 };
 

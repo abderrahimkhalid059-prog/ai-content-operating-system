@@ -12,8 +12,11 @@ export const SERVICE_NAMES = {
   queue: 'queue',
 } as const;
 
-export const QUEUE_NAMES = { system: 'system' } as const;
-export const JOB_NAMES = { healthCheck: 'system.health-check' } as const;
+export const QUEUE_NAMES = { system: 'system', integrations: 'integrations' } as const;
+export const JOB_NAMES = {
+  healthCheck: 'system.health-check',
+  bloggerSyncSite: 'blogger.sync-site',
+} as const;
 
 export const ERROR_CODES = {
   validation: 'VALIDATION_ERROR',
@@ -37,6 +40,26 @@ export const ERROR_CODES = {
   memberRoleForbidden: 'MEMBER_ROLE_FORBIDDEN',
   websiteSlugConflict: 'WEBSITE_SLUG_CONFLICT',
   contentProfileDefaultConflict: 'CONTENT_PROFILE_DEFAULT_CONFLICT',
+  integrationNotConfigured: 'INTEGRATION_NOT_CONFIGURED',
+  integrationModeInvalid: 'INTEGRATION_MODE_INVALID',
+  integrationConnectionNotFound: 'INTEGRATION_CONNECTION_NOT_FOUND',
+  integrationConnectionExpired: 'INTEGRATION_CONNECTION_EXPIRED',
+  integrationCredentialDecryptionFailed: 'INTEGRATION_CREDENTIAL_DECRYPTION_FAILED',
+  integrationOAuthStateInvalid: 'INTEGRATION_OAUTH_STATE_INVALID',
+  integrationOAuthStateExpired: 'INTEGRATION_OAUTH_STATE_EXPIRED',
+  integrationOAuthStateReused: 'INTEGRATION_OAUTH_STATE_REUSED',
+  bloggerAccountUnauthorized: 'BLOGGER_ACCOUNT_UNAUTHORIZED',
+  bloggerPermissionDenied: 'BLOGGER_PERMISSION_DENIED',
+  bloggerBlogNotFound: 'BLOGGER_BLOG_NOT_FOUND',
+  bloggerPostNotFound: 'BLOGGER_POST_NOT_FOUND',
+  bloggerRateLimited: 'BLOGGER_RATE_LIMITED',
+  bloggerUpstreamUnavailable: 'BLOGGER_UPSTREAM_UNAVAILABLE',
+  bloggerTokenRefreshFailed: 'BLOGGER_TOKEN_REFRESH_FAILED',
+  bloggerDuplicateOperation: 'BLOGGER_DUPLICATE_OPERATION',
+  bloggerPublicPublishDisabled: 'BLOGGER_PUBLIC_PUBLISH_DISABLED',
+  bloggerDeleteDisabled: 'BLOGGER_DELETE_DISABLED',
+  bloggerInvalidHtml: 'BLOGGER_INVALID_HTML',
+  bloggerSyncAlreadyRunning: 'BLOGGER_SYNC_ALREADY_RUNNING',
 } as const;
 
 export type CorrelationId = string;

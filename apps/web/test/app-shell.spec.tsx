@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { AppLayout } from '../src/components/app-layout';
 import { DashboardPage } from '../src/pages/dashboard';
@@ -23,11 +23,9 @@ describe('Application shell', () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route index element={<DashboardPage />} />
-            </Route>
-          </Routes>
+          <AppLayout>
+            <DashboardPage />
+          </AppLayout>
         </MemoryRouter>
       </QueryClientProvider>,
     );

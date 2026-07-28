@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/auth-context';
 import { Loading } from '../../components/loading';
 
 export function WorkspaceDetailsPage(): React.JSX.Element {
-  const { workspaceId = '' } = useParams();
+  const { workspaceId = '' } = useParams<{ workspaceId?: string }>();
   const auth = useAuth();
   const client = useQueryClient();
   const workspace = useQuery({

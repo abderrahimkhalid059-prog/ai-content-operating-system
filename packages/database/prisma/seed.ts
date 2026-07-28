@@ -3,7 +3,10 @@ import { hash, verify, argon2id } from 'argon2';
 import { PrismaClient } from '../src/generated/prisma/client';
 import {
   ContentProfileStatus,
+  IntegrationMode,
+  PublishingProviderType,
   UserStatus,
+  WebsiteConnectionStatus,
   WebsitePlatform,
   WebsiteStatus,
   WorkspaceRole,
@@ -119,6 +122,40 @@ async function seed(): Promise<void> {
       },
     });
   });
+  if ((process.env.SEED_MOCK_BLOGGER_CONNECTION ?? 'false').toLowerCase() === 'true') {
+    const existingConnection = await prisma.websiteConnection.findFirst({
+      where: {
+        workspaceId: workspace.id,
+        websiteId: website.id,
+        provider: PublishingProviderType.BLOGGER,
+        revokedAt: null,
+      },
+    });
+    const data = {
+      mode: IntegrationMode.MOCK,
+      status: WebsiteConnectionStatus.CONNECTED,
+      externalAccountId: 'mock-google-account-001',
+      externalSiteId: 'mock-blog-sports-001',
+      externalSiteName: 'Blog sportif de démonstration',
+      externalSiteUrl: 'https://sports-mock.example.test',
+      grantedScopes: ['mock:blogger'],
+      connectedAt: new Date(),
+      metadata: { accountEmail: 'mock.blogger@example.test', seeded: true },
+    };
+    if (existingConnection) {
+      await prisma.websiteConnection.update({ where: { id: existingConnection.id }, data });
+    } else {
+      await prisma.websiteConnection.create({
+        data: {
+          workspaceId: workspace.id,
+          websiteId: website.id,
+          provider: PublishingProviderType.BLOGGER,
+          connectedByUserId: user.id,
+          ...data,
+        },
+      });
+    }
+  }
 }
 
 seed()

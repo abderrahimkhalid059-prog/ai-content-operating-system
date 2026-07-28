@@ -160,6 +160,41 @@ label {
   padding: 7px 11px;
   border-radius: 999px;
 }
+.safety-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 14px 18px;
+  border: 1px solid #e8d8a8;
+  border-radius: 12px;
+  background: #fff9e8;
+  color: #684f12;
+}
+.section-gap {
+  margin-top: 22px;
+}
+.selection-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.selection-row > div {
+  display: grid;
+  gap: 5px;
+}
+.selection-row small,
+.muted-copy {
+  color: var(--muted);
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .content {
   max-width: 1240px;
   margin: 0 auto;

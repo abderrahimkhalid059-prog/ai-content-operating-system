@@ -6,7 +6,7 @@ import { useAuth } from '../../auth/auth-context';
 import { Loading } from '../../components/loading';
 
 export function WebsitesPage(): React.JSX.Element {
-  const { workspaceId = '' } = useParams();
+  const { workspaceId = '' } = useParams<{ workspaceId?: string }>();
   const auth = useAuth();
   const websites = useQuery({
     queryKey: ['websites', workspaceId],

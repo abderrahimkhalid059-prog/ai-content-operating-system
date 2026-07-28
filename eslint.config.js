@@ -39,6 +39,8 @@ module.exports = tseslint.config(
       'packages/database/test/relationships.integration.spec.ts',
       'packages/database/test/seed.integration.spec.ts',
       'apps/api/test/phase1.integration.spec.ts',
+      'apps/api/test/phase2-blogger.integration.spec.ts',
+      'apps/worker/test/blogger-sync.integration.spec.ts',
     ],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -46,5 +48,9 @@ module.exports = tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
     },
+  },
+  {
+    files: ['packages/integrations/test/**/*.ts'],
+    ...tseslint.configs.disableTypeChecked,
   },
 );

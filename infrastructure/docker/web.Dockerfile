@@ -7,6 +7,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/database/package.json packages/database/package.json
+COPY packages/integrations/package.json packages/integrations/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/testing/package.json packages/testing/package.json
 RUN npm ci

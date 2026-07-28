@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Redirect, useHistory, useLocation } from 'react-router-dom';
 import { z } from 'zod';
 import { ApiClientError } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
@@ -14,18 +14,18 @@ type LoginForm = z.infer<typeof schema>;
 
 export function LoginPage(): React.JSX.Element {
   const auth = useAuth();
-  const navigate = useNavigate();
+  const history = useHistory();
   const location = useLocation();
   const [error, setError] = useState<string>();
   const form = useForm<LoginForm>({ resolver: zodResolver(schema) });
-  if (!auth.loading && auth.user) return <Navigate to="/" replace />;
+  if (!auth.loading && auth.user) return <Redirect to="/" />;
 
   const submit = form.handleSubmit(async (values) => {
     setError(undefined);
     try {
       await auth.login(values.email, values.password);
       const from = (location.state as { from?: unknown } | null)?.from;
-      void navigate(typeof from === 'string' ? from : '/', { replace: true });
+      history.replace(typeof from === 'string' ? from : '/');
     } catch (cause) {
       setError(cause instanceof ApiClientError ? cause.message : 'Connexion impossible.');
     }

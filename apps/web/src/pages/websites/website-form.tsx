@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WebsitePlatform, WebsiteStatus, WebsiteSummary } from '@ai-content-os/contracts';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useHistory, useParams } from 'react-router-dom';
 import { z } from 'zod';
 import { apiRequest, ApiClientError } from '../../api/client';
 import { Loading } from '../../components/loading';
@@ -21,8 +21,11 @@ const schema = z.object({
 type WebsiteFormValues = z.infer<typeof schema>;
 
 export function WebsiteFormPage(): React.JSX.Element {
-  const { workspaceId = '', websiteId } = useParams();
-  const navigate = useNavigate();
+  const { workspaceId = '', websiteId } = useParams<{
+    workspaceId?: string;
+    websiteId?: string;
+  }>();
+  const history = useHistory();
   const client = useQueryClient();
   const editing = Boolean(websiteId);
   const website = useQuery({
@@ -62,13 +65,13 @@ export function WebsiteFormPage(): React.JSX.Element {
       ),
     onSuccess: (result) => {
       void client.invalidateQueries({ queryKey: ['websites', workspaceId] });
-      void navigate(`/espaces/${workspaceId}/sites/${result.id}`);
+      history.push(`/espaces/${workspaceId}/sites/${result.id}`);
     },
   });
   const deactivate = useMutation({
     mutationFn: () =>
       apiRequest<void>(`/workspaces/${workspaceId}/websites/${websiteId}`, { method: 'DELETE' }),
-    onSuccess: () => navigate(`/espaces/${workspaceId}/sites`),
+    onSuccess: () => history.push(`/espaces/${workspaceId}/sites`),
   });
   if (editing && website.isPending) return <Loading />;
   return (
@@ -79,12 +82,22 @@ export function WebsiteFormPage(): React.JSX.Element {
           <h1>{editing ? 'Modifier le site' : 'Nouveau site'}</h1>
         </div>
         {editing && (
-          <Link
-            className="secondary-button"
-            to={`/espaces/${workspaceId}/sites/${websiteId}/profils-editoriaux`}
-          >
-            Profils éditoriaux
-          </Link>
+          <div className="button-row">
+            {website.data?.platform === 'BLOGGER' && (
+              <Link
+                className="primary-button"
+                to={`/espaces/${workspaceId}/sites/${websiteId}/integrations/blogger`}
+              >
+                Intégration Blogger
+              </Link>
+            )}
+            <Link
+              className="secondary-button"
+              to={`/espaces/${workspaceId}/sites/${websiteId}/profils-editoriaux`}
+            >
+              Profils éditoriaux
+            </Link>
+          </div>
         )}
       </div>
       <form

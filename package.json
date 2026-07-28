@@ -15,7 +15,7 @@
     "dev:api": "npm run build:packages && npm run dev -w @ai-content-os/api",
     "dev:web": "npm run dev -w @ai-content-os/web",
     "dev:worker": "npm run build:packages && npm run dev -w @ai-content-os/worker",
-    "build:packages": "npm run build -w @ai-content-os/shared && npm run build -w @ai-content-os/config && npm run build -w @ai-content-os/contracts && npm run build -w @ai-content-os/database && npm run build -w @ai-content-os/testing",
+    "build:packages": "npm run build -w @ai-content-os/shared && npm run build -w @ai-content-os/config && npm run build -w @ai-content-os/contracts && npm run build -w @ai-content-os/integrations && npm run build -w @ai-content-os/database && npm run build -w @ai-content-os/testing",
     "build": "npm run db:generate && npm run build:packages && npm run build -w @ai-content-os/api && npm run build -w @ai-content-os/web && npm run build -w @ai-content-os/worker",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -36,13 +36,13 @@
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "concurrently": "^9.2.1",
-    "eslint": "^9.39.1",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.48.1",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.0.15"
   }
 }

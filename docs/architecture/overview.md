@@ -16,6 +16,14 @@ Users and workspaces have a many-to-many relationship through `WorkspaceMember`.
 
 Each website belongs to exactly one workspace and can own configuration-only content profiles. Authentication, membership, and permission guards establish a trusted request context. Every tenant service predicate includes workspace ID, and composite database constraints prevent a content profile from referencing a website in another workspace. Ownership and default-profile changes use serializable transactions.
 
-## Future provider abstractions
+## Phase 2 publishing-provider boundary
 
-Publishing and AI integrations will be introduced behind application interfaces in later phases. No provider SDK, credential storage, executable prompt, or provider-specific domain behavior is present in Phase 1. Provider abstractions should remain inside the modular monolith until scale or isolation evidence justifies another architecture.
+`packages/integrations` defines a framework-neutral publishing contract implemented by separate
+Mock and Live Blogger adapters. NestJS services own workspace authorization, OAuth lifecycle,
+connection history, publication idempotency and audit. The Worker owns paginated import and label
+reconciliation through `blogger.sync-site`; PostgreSQL remains authoritative and Redis is only the
+queue transport.
+
+Mock and Live are selected centrally. Live credentials are AES-256-GCM envelopes decrypted only
+inside backend provider composition. The React client sees only safe summaries and server safety
+flags. Imported external posts are snapshots, not generated Articles.

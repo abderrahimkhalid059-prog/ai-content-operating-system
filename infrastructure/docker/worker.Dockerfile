@@ -7,6 +7,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/database/package.json packages/database/package.json
+COPY packages/integrations/package.json packages/integrations/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/testing/package.json packages/testing/package.json
 RUN npm ci
@@ -27,6 +28,7 @@ RUN rm -rf node_modules/@ai-content-os \
   && ln -s ../../packages/config node_modules/@ai-content-os/config \
   && ln -s ../../packages/contracts node_modules/@ai-content-os/contracts \
   && ln -s ../../packages/database node_modules/@ai-content-os/database \
+  && ln -s ../../packages/integrations node_modules/@ai-content-os/integrations \
   && ln -s ../../packages/shared node_modules/@ai-content-os/shared \
   && ln -s ../../packages/testing node_modules/@ai-content-os/testing
 USER node

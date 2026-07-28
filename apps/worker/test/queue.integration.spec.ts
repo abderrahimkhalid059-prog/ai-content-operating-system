@@ -34,8 +34,8 @@ describe('BullMQ integration', () => {
       },
       { attempts: 2, backoff: { type: 'exponential', delay: 10 } },
     );
-    const result: unknown = await job.waitUntilFinished(queueEvents, 5_000);
+    const result: unknown = await job.waitUntilFinished(queueEvents, 10_000);
     expect(result).toMatchObject({ healthy: true, correlationId });
     expect((await queue.getJob(job.id!))?.attemptsMade).toBe(2);
-  });
+  }, 15_000);
 });

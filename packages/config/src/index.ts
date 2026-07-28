@@ -4,6 +4,10 @@ const optionalPassword = z
   .string()
   .optional()
   .transform((value) => value || undefined);
+const optionalString = z
+  .string()
+  .optional()
+  .transform((value) => value?.trim() || undefined);
 
 const duration = z.string().regex(/^\d+(ms|s|m|h|d)$/, 'Use a duration such as 15m or 7d.');
 const booleanFromEnvironment = z.enum(['true', 'false']).transform((value) => value === 'true');
@@ -32,6 +36,28 @@ export const environmentSchema = z
     CORS_ORIGINS: z.string().min(1),
     APP_URL: z.string().url(),
     API_URL: z.string().url(),
+    BLOGGER_MODE: z.enum(['mock', 'live']).optional(),
+    GOOGLE_BLOGGER_CLIENT_ID: optionalString,
+    GOOGLE_BLOGGER_CLIENT_SECRET: optionalString,
+    GOOGLE_BLOGGER_REDIRECT_URI: optionalString,
+    GOOGLE_BLOGGER_SCOPES: z.string().min(1).default('https://www.googleapis.com/auth/blogger'),
+    BLOGGER_API_BASE_URL: z.string().url().default('https://www.googleapis.com/blogger/v3'),
+    BLOGGER_OAUTH_AUTH_URL: z
+      .string()
+      .url()
+      .default('https://accounts.google.com/o/oauth2/v2/auth'),
+    BLOGGER_OAUTH_TOKEN_URL: z.string().url().default('https://oauth2.googleapis.com/token'),
+    INTEGRATION_ENCRYPTION_KEY: optionalString,
+    INTEGRATION_ENCRYPTION_KEY_VERSION: z
+      .string()
+      .regex(/^[A-Za-z0-9._-]{1,50}$/)
+      .default('v1'),
+    BLOGGER_ALLOW_PUBLIC_PUBLISH: booleanFromEnvironment.default(false),
+    BLOGGER_ALLOW_DELETE: booleanFromEnvironment.default(false),
+    BLOGGER_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(10_000),
+    BLOGGER_MAX_RETRIES: z.coerce.number().int().min(0).max(10).default(3),
+    BLOGGER_SYNC_PAGE_SIZE: z.coerce.number().int().min(1).max(500).default(50),
+    SEED_MOCK_BLOGGER_CONNECTION: booleanFromEnvironment.default(false),
   })
   .superRefine((config, context) => {
     if (config.JWT_ACCESS_SECRET === config.REFRESH_TOKEN_SECRET) {
@@ -60,7 +86,60 @@ export const environmentSchema = z
         message: 'Production requires deployment-managed authentication secrets.',
       });
     }
-  });
+    if (config.NODE_ENV === 'production' && !config.BLOGGER_MODE) {
+      context.addIssue({
+        code: 'custom',
+        path: ['BLOGGER_MODE'],
+        message: 'Production must explicitly select mock or live Blogger mode.',
+      });
+    }
+    const bloggerMode = config.BLOGGER_MODE ?? 'mock';
+    if (
+      bloggerMode === 'live' &&
+      (!config.GOOGLE_BLOGGER_CLIENT_ID ||
+        !config.GOOGLE_BLOGGER_CLIENT_SECRET ||
+        !config.GOOGLE_BLOGGER_REDIRECT_URI)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['GOOGLE_BLOGGER_CLIENT_ID'],
+        message: 'Live Blogger mode requires client ID, client secret, and redirect URI.',
+      });
+    }
+    if (config.GOOGLE_BLOGGER_REDIRECT_URI) {
+      const redirect = z.string().url().safeParse(config.GOOGLE_BLOGGER_REDIRECT_URI);
+      if (!redirect.success) {
+        context.addIssue({
+          code: 'custom',
+          path: ['GOOGLE_BLOGGER_REDIRECT_URI'],
+          message: 'Use an absolute Google OAuth redirect URI.',
+        });
+      }
+    }
+    if (config.INTEGRATION_ENCRYPTION_KEY) {
+      let keyLength = 0;
+      try {
+        keyLength = Buffer.from(config.INTEGRATION_ENCRYPTION_KEY, 'base64').length;
+      } catch {
+        keyLength = 0;
+      }
+      if (keyLength !== 32) {
+        context.addIssue({
+          code: 'custom',
+          path: ['INTEGRATION_ENCRYPTION_KEY'],
+          message: 'Integration encryption key must be a base64-encoded 32-byte key.',
+        });
+      }
+    }
+    if (config.NODE_ENV === 'production' && !config.INTEGRATION_ENCRYPTION_KEY) {
+      context.addIssue({
+        code: 'custom',
+        path: ['INTEGRATION_ENCRYPTION_KEY'],
+        message: 'Production requires an integration encryption key.',
+      });
+    }
+  })
+  .transform((config) => ({ ...config, BLOGGER_MODE: config.BLOGGER_MODE ?? ('mock' as const) }));
 
 export type EnvironmentConfig = z.infer<typeof environmentSchema>;
 
@@ -98,4 +177,6 @@ export const redactEnvironment = (config: EnvironmentConfig): Record<string, unk
   JWT_ACCESS_SECRET: '[REDACTED]',
   REFRESH_TOKEN_SECRET: '[REDACTED]',
   SEED_OWNER_PASSWORD: config.SEED_OWNER_PASSWORD ? '[REDACTED]' : undefined,
+  GOOGLE_BLOGGER_CLIENT_SECRET: config.GOOGLE_BLOGGER_CLIENT_SECRET ? '[REDACTED]' : undefined,
+  INTEGRATION_ENCRYPTION_KEY: config.INTEGRATION_ENCRYPTION_KEY ? '[REDACTED]' : undefined,
 });

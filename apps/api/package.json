@@ -10,19 +10,20 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/health.spec.ts test/system.controller.spec.ts test/password.spec.ts test/permissions.spec.ts",
-    "test:integration": "vitest run test/error-format.integration.spec.ts test/phase1.integration.spec.ts"
+    "test:integration": "vitest run test/error-format.integration.spec.ts test/phase1.integration.spec.ts test/phase2-blogger.integration.spec.ts"
   },
   "dependencies": {
     "@ai-content-os/config": "*",
     "@ai-content-os/contracts": "*",
     "@ai-content-os/database": "*",
+    "@ai-content-os/integrations": "*",
     "@ai-content-os/shared": "*",
     "@nestjs/common": "^11.1.9",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.9",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.1.9",
-    "@nestjs/swagger": "^11.2.3",
+    "@nestjs/swagger": "11.4.5",
     "argon2": "^0.45.1",
     "bullmq": "^5.66.4",
     "class-transformer": "^0.5.1",

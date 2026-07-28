@@ -16,13 +16,13 @@
     "test:integration": "vitest run test/relationships.integration.spec.ts test/seed.integration.spec.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.9.0",
-    "@prisma/client": "^7.9.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "argon2": "^0.45.1",
     "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/pg": "^8.15.6",
-    "prisma": "^7.9.0"
+    "prisma": "^7.9.1"
   }
 }

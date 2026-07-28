@@ -1,6 +1,8 @@
 # AI Content Operating System
 
-Production-oriented Phase 1 identity and multi-website core for a content operations SaaS. It includes secure private authentication, users, sessions, workspaces, fixed RBAC, tenant isolation, generic websites, and configuration-only content profiles. It deliberately contains no content-generation, OAuth, provider, or publishing logic.
+Production-oriented Phase 2 Blogger-integration foundation for a content operations SaaS. It
+preserves the Phase 0/1 identity and multi-website core and adds a secure, workspace-scoped,
+draft-first Blogger transport that is fully usable in deterministic Mock mode.
 
 ## Architecture
 
@@ -8,8 +10,9 @@ The project is a TypeScript npm-workspaces monorepo built as a modular monolith 
 
 - `apps/api`: NestJS REST API with rotating sessions, workspace authorization, tenant CRUD, Swagger, validated configuration, redacted JSON logging, health probes, and queue validation routes.
 - `apps/web`: French React/Vite administration application with memory-only access tokens, silent refresh, protected routes, workspace selection, and permission-aware management screens.
-- `apps/worker`: BullMQ worker for the infrastructure-only `system.health-check` job.
+- `apps/worker`: BullMQ worker for health validation and paginated Blogger synchronization.
 - `packages/database`: Prisma 7 PostgreSQL client, schema, migration, seed, and lifecycle wrapper.
+- `packages/integrations`: framework-independent Mock/Live Blogger provider adapters and credential encryption.
 - `packages/config`, `shared`, `contracts`, and `testing`: framework-neutral shared foundations.
 
 PostgreSQL is the source of truth. Redis provides queue and temporary processing state. See [architecture overview](docs/architecture/overview.md) and the ADRs in `docs/decisions`.
@@ -37,6 +40,11 @@ The UI is available at `http://localhost:5173`, API health at `http://localhost:
 ## Environment variables
 
 All server variables are validated at startup. Authentication requires distinct `JWT_ACCESS_SECRET` and `REFRESH_TOKEN_SECRET`, configurable access/refresh TTLs, cookie name/secure policy, password minimum, and login-rate window/max. Production requires secure cookies. `SEED_OWNER_EMAIL` and `SEED_OWNER_PASSWORD` are used only by the explicit development seed; the password is mandatory, never logged, and should remain in an ignored local environment file. The browser receives only `VITE_API_URL`; never expose secrets with a `VITE_` prefix.
+
+`BLOGGER_MODE=mock` needs no Google credentials. Production requires an explicit mode; Live mode
+requires Google OAuth values and an AES-256-GCM key. Public publish and delete default to false.
+See [Blogger API](docs/api/blogger.md) and the
+[future Live checklist](docs/integrations/blogger-live-validation.md).
 
 ## Commands
 
@@ -72,8 +80,13 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 1 scope
+## Phase 2 scope
 
-Implemented: the complete Phase 0 foundation plus Argon2id authentication, rotating server sessions, user lifecycle/reset, multi-workspace membership, seven fixed roles, transactional last-Owner rules, tenant guards, generic Website CRUD, content-profile CRUD/default selection, sensitive audit events, French administration pages, and Docker-backed security/integration validation.
+Implemented: all validated Phase 0/1 behavior plus provider abstraction, deterministic Mock OAuth
+and Blogger fixtures, Live HTTP adapter contract, encrypted live credentials, secure one-time OAuth
+state, blog discovery/selection, BullMQ imports, labels, manual draft CRUD, safety ceilings,
+idempotency, audit and French administration.
 
-Not implemented: public registration, recovery email, MFA, social login, custom roles, billing, AI providers or content generation, research, article workflows, Blogger OAuth/API, WordPress publishing, SEO, affiliates, analytics, or production deployment. Development seed records are placeholders and are not production credentials or content.
+Not implemented: real Google/Blogger validation, automatic or scheduled publishing, WordPress,
+AI/content generation, research, fact verification, SEO engines, images, affiliates, analytics,
+billing or any Phase 3 feature. Development fixtures are not production credentials or content.

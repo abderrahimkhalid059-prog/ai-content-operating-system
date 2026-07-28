@@ -1,9 +1,10 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { NavLink, useHistory } from 'react-router-dom';
 import { useAuth } from '../auth/auth-context';
 
-export function AppLayout(): React.JSX.Element {
+export function AppLayout({ children }: { children: ReactNode }): React.JSX.Element {
   const auth = useAuth();
-  const navigate = useNavigate();
+  const history = useHistory();
   const selected = auth.selectedWorkspaceId;
   const canManageUsers =
     auth.user?.workspaces.some((workspace) => workspace.permissions.includes('users.read')) ??
@@ -16,7 +17,7 @@ export function AppLayout(): React.JSX.Element {
           <span>Content OS</span>
         </div>
         <nav aria-label="Navigation principale">
-          <NavLink to="/" end>
+          <NavLink to="/" exact>
             Accueil
           </NavLink>
           <NavLink to="/espaces">Espaces</NavLink>
@@ -31,7 +32,7 @@ export function AppLayout(): React.JSX.Element {
           <NavLink to="/securite/sessions">Sessions</NavLink>
           <NavLink to="/systeme">Système</NavLink>
         </nav>
-        <div className="sidebar-note">Identité & multi-site · Phase 1</div>
+        <div className="sidebar-note">Identité, multi-site & Blogger · Phase 2</div>
       </aside>
       <div className="main-column">
         <header className="topbar">
@@ -42,7 +43,7 @@ export function AppLayout(): React.JSX.Element {
               value={selected ?? ''}
               onChange={(event) => {
                 auth.selectWorkspace(event.target.value);
-                void navigate(`/espaces/${event.target.value}`);
+                history.push(`/espaces/${event.target.value}`);
               }}
             >
               {auth.user?.workspaces.map((workspace) => (
@@ -62,9 +63,7 @@ export function AppLayout(): React.JSX.Element {
             </button>
           </div>
         </header>
-        <main className="content">
-          <Outlet />
-        </main>
+        <main className="content">{children}</main>
       </div>
     </div>
   );

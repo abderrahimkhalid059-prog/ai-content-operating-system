@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { Permission } from '@ai-content-os/contracts';
-import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { Redirect, useLocation, useParams } from 'react-router-dom';
 import { Loading } from '../components/loading';
 import { useAuth } from './auth-context';
 
@@ -8,9 +8,10 @@ export function ProtectedRoute({ children }: { children: ReactNode }): React.JSX
   const auth = useAuth();
   const location = useLocation();
   if (auth.loading) return <Loading />;
-  if (!auth.user) return <Navigate to="/connexion" replace state={{ from: location.pathname }} />;
+  if (!auth.user)
+    return <Redirect to={{ pathname: '/connexion', state: { from: location.pathname } }} />;
   if (auth.user.mustChangePassword && location.pathname !== '/profil') {
-    return <Navigate to="/profil?mot-de-passe=obligatoire" replace />;
+    return <Redirect to="/profil?mot-de-passe=obligatoire" />;
   }
   return <>{children}</>;
 }
@@ -23,6 +24,6 @@ export function PermissionRoute({
   children: ReactNode;
 }): React.JSX.Element {
   const auth = useAuth();
-  const { workspaceId } = useParams();
-  return auth.can(permission, workspaceId) ? <>{children}</> : <Navigate to="/interdit" replace />;
+  const { workspaceId } = useParams<{ workspaceId?: string }>();
+  return auth.can(permission, workspaceId) ? <>{children}</> : <Redirect to="/interdit" />;
 }

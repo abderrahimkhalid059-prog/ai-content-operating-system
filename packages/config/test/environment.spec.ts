@@ -43,4 +43,28 @@ describe('validateEnvironment', () => {
       validateEnvironment({ ...valid, REFRESH_TOKEN_SECRET: valid.JWT_ACCESS_SECRET }),
     ).toThrow(/different/);
   });
+
+  it('defaults development and test Blogger mode to mock with safe mutation ceilings', () => {
+    const parsed = validateEnvironment(valid);
+    expect(parsed.BLOGGER_MODE).toBe('mock');
+    expect(parsed.BLOGGER_ALLOW_PUBLIC_PUBLISH).toBe(false);
+    expect(parsed.BLOGGER_ALLOW_DELETE).toBe(false);
+  });
+
+  it('rejects invalid Blogger modes and incomplete live configuration', () => {
+    expect(() => validateEnvironment({ ...valid, BLOGGER_MODE: 'unsafe' })).toThrow(/BLOGGER_MODE/);
+    expect(() => validateEnvironment({ ...valid, BLOGGER_MODE: 'live' })).toThrow(
+      /GOOGLE_BLOGGER_CLIENT_ID/,
+    );
+  });
+
+  it('requires an explicit Blogger mode and encryption key in production', () => {
+    const production = {
+      ...valid,
+      NODE_ENV: 'production',
+      AUTH_COOKIE_SECURE: 'true',
+      BLOGGER_MODE: undefined,
+    };
+    expect(() => validateEnvironment(production)).toThrow(/BLOGGER_MODE/);
+  });
 });

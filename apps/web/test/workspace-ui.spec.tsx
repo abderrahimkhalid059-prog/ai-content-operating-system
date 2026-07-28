@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { MembersPage } from '../src/pages/workspaces/members';
 import { WebsiteFormPage } from '../src/pages/websites/website-form';
@@ -40,9 +40,7 @@ const wrapper = (element: React.ReactNode, path: string, route: string) =>
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path={route} element={element} />
-        </Routes>
+        <Route path={route}>{element}</Route>
       </MemoryRouter>
     </QueryClientProvider>,
   );

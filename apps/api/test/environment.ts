@@ -23,4 +23,10 @@ Object.assign(process.env, {
   CORS_ORIGINS: 'http://localhost:5174',
   APP_URL: 'http://localhost:5174',
   API_URL: 'http://localhost:3001/api/v1',
+  BLOGGER_MODE: 'mock',
+  GOOGLE_BLOGGER_REDIRECT_URI: 'http://localhost:3001/api/v1/integrations/blogger/callback',
+  BLOGGER_ALLOW_PUBLIC_PUBLISH: 'true',
+  BLOGGER_ALLOW_DELETE: 'true',
+  BLOGGER_MAX_RETRIES: '2',
+  BLOGGER_SYNC_PAGE_SIZE: '2',
 });

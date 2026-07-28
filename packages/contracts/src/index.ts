@@ -57,6 +57,18 @@ export type Permission =
   | 'contentProfiles.create'
   | 'contentProfiles.update'
   | 'contentProfiles.delete'
+  | 'integrations.read'
+  | 'integrations.connect'
+  | 'integrations.update'
+  | 'integrations.disconnect'
+  | 'integrations.test'
+  | 'integrations.sync'
+  | 'externalPosts.read'
+  | 'externalPosts.import'
+  | 'providerPublishing.createDraft'
+  | 'providerPublishing.update'
+  | 'providerPublishing.publish'
+  | 'providerPublishing.delete'
   | 'audit.read';
 
 export interface SafeUserSummary {
@@ -182,4 +194,276 @@ export interface JobStatusResponse {
   correlationId: string;
   result?: unknown;
   failedReason?: string;
+}
+
+export type ProviderMode = 'MOCK' | 'LIVE';
+export type PublishingProviderName = 'BLOGGER' | 'WORDPRESS' | 'OTHER';
+export type IntegrationConnectionStatus =
+  'PENDING' | 'CONNECTED' | 'DEGRADED' | 'EXPIRED' | 'REVOKED' | 'DISCONNECTED';
+export type ProviderPostStatus = 'DRAFT' | 'PUBLISHED' | 'SCHEDULED' | 'DELETED';
+
+export interface IntegrationSystemStatus {
+  bloggerMode: ProviderMode;
+  publicPublishEnabled: boolean;
+  deleteEnabled: boolean;
+}
+
+export interface IntegrationSummary {
+  id: string;
+  workspaceId: string;
+  websiteId: string;
+  provider: PublishingProviderName;
+  mode: ProviderMode;
+  status: IntegrationConnectionStatus;
+  externalAccountId?: string;
+  externalSiteId?: string;
+  externalSiteName?: string;
+  externalSiteUrl?: string;
+  grantedScopes: string[];
+  connectedAt?: string;
+  lastTestedAt?: string;
+  lastSuccessfulSyncAt?: string;
+  expiresAt?: string;
+  lastErrorCode?: string;
+  lastErrorAt?: string;
+  publicPublishEnabled: boolean;
+  deleteEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthorizationRequest {
+  state: string;
+  redirectUri: string;
+  scopes: string[];
+}
+
+export interface AuthorizationUrlResult {
+  url: string;
+}
+
+export interface AuthorizationCallbackRequest {
+  code: string;
+  state: string;
+  redirectUri: string;
+}
+
+export interface ProviderCredential {
+  accessToken: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresAt?: string;
+  scopes: string[];
+}
+
+export interface AuthorizationCallbackResult {
+  externalAccountId: string;
+  accountEmail?: string;
+  credentials?: ProviderCredential;
+  grantedScopes: string[];
+}
+
+export type MockProviderSimulation =
+  | 'TOKEN_EXPIRED'
+  | 'REFRESH_FAILURE'
+  | 'RATE_LIMIT'
+  | 'PERMISSION_DENIED'
+  | 'SITE_NOT_FOUND'
+  | 'POST_NOT_FOUND'
+  | 'UPSTREAM_UNAVAILABLE';
+
+export interface ProviderConnectionContext {
+  connectionId: string;
+  mode: ProviderMode;
+  credentials?: ProviderCredential;
+  externalAccountId?: string;
+  externalSiteId?: string;
+  simulation?: MockProviderSimulation;
+}
+
+export interface TokenRefreshResult {
+  credentials: ProviderCredential;
+}
+
+export interface ConnectionTestResult {
+  ok: boolean;
+  checkedAt: string;
+  externalAccountId?: string;
+  externalSiteId?: string;
+}
+
+export interface ProviderPaginationInput {
+  pageSize?: number;
+  pageToken?: string;
+}
+
+export interface ProviderSite {
+  id: string;
+  name: string;
+  url: string;
+  language?: string;
+  description?: string;
+}
+
+export interface ProviderSitePage {
+  items: ProviderSite[];
+  nextPageToken?: string;
+}
+
+export interface ProviderTaxonomyResult {
+  labels: Array<{ name: string; usageCount: number }>;
+}
+
+export interface ProviderPost {
+  id: string;
+  siteId: string;
+  title: string;
+  htmlContent: string;
+  url?: string;
+  status: ProviderPostStatus;
+  labels: string[];
+  publishedAt?: string;
+  updatedAt: string;
+}
+
+export interface ProviderPostPage {
+  items: ProviderPost[];
+  nextPageToken?: string;
+}
+
+export interface CreateProviderDraftInput {
+  externalSiteId: string;
+  title: string;
+  htmlContent: string;
+  labels: string[];
+  idempotencyKey: string;
+}
+
+export interface UpdateProviderPostInput extends CreateProviderDraftInput {
+  externalPostId: string;
+}
+
+export interface PublishProviderPostInput {
+  externalSiteId: string;
+  externalPostId: string;
+  idempotencyKey: string;
+}
+
+export type DeleteProviderPostInput = PublishProviderPostInput;
+
+export interface ProviderPostMutationResult {
+  post: ProviderPost;
+  created: boolean;
+}
+
+export interface PublishingProvider {
+  getAuthorizationUrl(input: AuthorizationRequest): Promise<AuthorizationUrlResult>;
+  handleAuthorizationCallback(
+    input: AuthorizationCallbackRequest,
+  ): Promise<AuthorizationCallbackResult>;
+  refreshConnection(connection: ProviderConnectionContext): Promise<TokenRefreshResult>;
+  testConnection(connection: ProviderConnectionContext): Promise<ConnectionTestResult>;
+  listSites(
+    connection: ProviderConnectionContext,
+    pagination?: ProviderPaginationInput,
+  ): Promise<ProviderSitePage>;
+  getSite(connection: ProviderConnectionContext, externalSiteId: string): Promise<ProviderSite>;
+  listTaxonomy(
+    connection: ProviderConnectionContext,
+    externalSiteId: string,
+  ): Promise<ProviderTaxonomyResult>;
+  listPosts(
+    connection: ProviderConnectionContext,
+    externalSiteId: string,
+    pagination?: ProviderPaginationInput,
+  ): Promise<ProviderPostPage>;
+  getPost(
+    connection: ProviderConnectionContext,
+    externalSiteId: string,
+    externalPostId: string,
+  ): Promise<ProviderPost>;
+  createDraft(
+    connection: ProviderConnectionContext,
+    input: CreateProviderDraftInput,
+  ): Promise<ProviderPostMutationResult>;
+  updatePost(
+    connection: ProviderConnectionContext,
+    input: UpdateProviderPostInput,
+  ): Promise<ProviderPostMutationResult>;
+  publishPost(
+    connection: ProviderConnectionContext,
+    input: PublishProviderPostInput,
+  ): Promise<ProviderPostMutationResult>;
+  deletePost(connection: ProviderConnectionContext, input: DeleteProviderPostInput): Promise<void>;
+}
+
+export type DiscoveredBloggerBlog = ProviderSite;
+
+export interface ExternalPostSummary {
+  id: string;
+  externalPostId: string;
+  externalBlogId: string;
+  title: string;
+  externalUrl?: string;
+  status: ProviderPostStatus;
+  labels: string[];
+  publishedAt?: string;
+  updatedExternallyAt?: string;
+  lastImportedAt: string;
+  deletedExternallyAt?: string;
+}
+
+export interface ExternalLabelSummary {
+  id: string;
+  name: string;
+  normalizedName: string;
+  usageCount: number;
+  lastSeenAt: string;
+}
+
+export interface IntegrationSyncRunSummary {
+  id: string;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  correlationId: string;
+  externalJobId?: string;
+  startedAt?: string;
+  completedAt?: string;
+  itemsProcessed: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  itemsFailed: number;
+  errorCode?: string;
+  safeErrorMessage?: string;
+  createdAt: string;
+}
+
+export interface StartBloggerConnectionResult {
+  authorizationUrl: string;
+  expiresAt: string;
+}
+
+export interface PublicationOperationResult {
+  operationId: string;
+  idempotencyKey: string;
+  status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  post?: ExternalPostSummary;
+}
+
+export interface BloggerSyncJobData {
+  syncRunId: string;
+  workspaceId: string;
+  websiteId: string;
+  connectionId: string;
+  correlationId: string;
+}
+
+export interface BloggerSyncJobResult {
+  syncRunId: string;
+  correlationId: string;
+  status: 'COMPLETED' | 'FAILED';
+  itemsProcessed: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  itemsFailed: number;
+  errorCode?: string;
 }

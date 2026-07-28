@@ -72,6 +72,10 @@ assert.ok(Object.keys(swagger.paths).some((path) => path.endsWith('/auth/login')
 assert.ok(
   Object.keys(swagger.paths).some((path) => path.includes('/workspaces/{workspaceId}/websites')),
 );
+assert.ok(
+  Object.keys(swagger.paths).some((path) => path.includes('/integrations/blogger/connect')),
+);
+assert.ok(Object.keys(swagger.paths).some((path) => path.includes('/external-posts')));
 
 const webResponse = await fetch(webUrl);
 const webBody = await webResponse.text();
@@ -156,7 +160,124 @@ const isolated = await fetch(
 );
 assert.equal(isolated.status, 404, 'A raw Website ID crossed a workspace boundary.');
 
+const integrationStatus = await request(`${apiUrl}/integrations/status`);
+assert.equal(integrationStatus.bloggerMode, 'MOCK');
+assert.equal(integrationStatus.publicPublishEnabled, false);
+assert.equal(integrationStatus.deleteEnabled, false);
+assert.ok(!JSON.stringify(integrationStatus).match(/token|secret|credential/i));
+
+const bloggerWebsite = await request(`${apiUrl}/workspaces/${primaryWorkspace.id}/websites`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Validation Blogger Mock',
+    slug: `blogger-${validationSuffix}`,
+    platform: 'BLOGGER',
+    language: 'ar',
+    locale: 'ar-MA',
+    timezone: 'Africa/Casablanca',
+    status: 'ACTIVE',
+  }),
+});
+const bloggerBase = `${apiUrl}/workspaces/${primaryWorkspace.id}/websites/${bloggerWebsite.id}`;
+const startedConnection = await request(`${bloggerBase}/integrations/blogger/connect`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    redirectAfter: `/espaces/${primaryWorkspace.id}/sites/${bloggerWebsite.id}/integrations/blogger`,
+  }),
+});
+const callback = await fetch(startedConnection.authorizationUrl, { redirect: 'manual' });
+assert.equal(callback.status, 302);
+assert.match(callback.headers.get('location') ?? '', /blogger=connected/);
+const discovered = await request(`${bloggerBase}/integrations/blogger/sites?pageSize=1`, {
+  headers: authorization,
+});
+assert.equal(discovered.items.length, 1);
+assert.ok(discovered.nextPageToken);
+const selectSite = (externalSiteId) =>
+  fetch(`${bloggerBase}/integrations/blogger/select-site`, {
+    method: 'POST',
+    headers: { ...authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ externalSiteId }),
+  });
+let selectedSiteId = 'mock-blog-sports-001';
+let selectedSiteResponse = await selectSite(selectedSiteId);
+if (selectedSiteResponse.status === 409) {
+  const conflict = await responseBody(selectedSiteResponse);
+  assert.equal(conflict?.error?.code, 'BLOGGER_DUPLICATE_OPERATION');
+  selectedSiteId = 'mock-blog-tourism-001';
+  selectedSiteResponse = await selectSite(selectedSiteId);
+}
+const selectedSiteBody = await responseBody(selectedSiteResponse);
+assert.ok(
+  selectedSiteResponse.ok,
+  `POST ${bloggerBase}/integrations/blogger/select-site returned ${selectedSiteResponse.status}: ${JSON.stringify(selectedSiteBody)}`,
+);
+assert.equal(selectedSiteBody.externalSiteId, selectedSiteId);
+const connectionTest = await request(`${bloggerBase}/integrations/blogger/test`, {
+  method: 'POST',
+  headers: authorization,
+});
+assert.equal(connectionTest.ok, true);
+const syncRun = await request(`${bloggerBase}/integrations/blogger/sync`, {
+  method: 'POST',
+  headers: authorization,
+});
+const completedSync = await poll(async () => {
+  const runs = await request(`${bloggerBase}/integrations/blogger/sync-runs`, {
+    headers: authorization,
+  });
+  const run = runs.find((candidate) => candidate.id === syncRun.id);
+  if (run?.status === 'FAILED') throw new Error(`Blogger sync failed: ${run.errorCode}`);
+  return run?.status === 'COMPLETED' ? run : undefined;
+}, 'Blogger BullMQ sync job');
+const expectedImportedPosts = selectedSiteId === 'mock-blog-sports-001' ? 4 : 1;
+assert.equal(completedSync.itemsProcessed, expectedImportedPosts);
+const importedPosts = await request(`${bloggerBase}/external-posts`, {
+  headers: authorization,
+});
+assert.equal(importedPosts.length, expectedImportedPosts);
+const importedLabels = await request(`${bloggerBase}/external-labels`, {
+  headers: authorization,
+});
+assert.ok(importedLabels.length > 1);
+const draftPayload = {
+  title: 'Validation full-stack Blogger',
+  htmlContent: '<p>Brouillon Mock de validation.</p>',
+  labels: ['validation', 'mock'],
+  idempotencyKey: `stack-create-${validationSuffix}`,
+};
+const draft = await request(`${bloggerBase}/integrations/blogger/test-posts`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify(draftPayload),
+});
+const retriedDraft = await request(`${bloggerBase}/integrations/blogger/test-posts`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify(draftPayload),
+});
+assert.equal(retriedDraft.post.externalPostId, draft.post.externalPostId);
+const blockedPublish = await fetch(
+  `${bloggerBase}/integrations/blogger/test-posts/${draft.post.externalPostId}/publish`,
+  {
+    method: 'POST',
+    headers: { ...authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ idempotencyKey: `stack-publish-${validationSuffix}` }),
+  },
+);
+assert.equal(blockedPublish.status, 403);
+await request(`${bloggerBase}/integrations/blogger/disconnect`, {
+  method: 'POST',
+  headers: authorization,
+});
+
 await request(`${apiUrl}/workspaces/${primaryWorkspace.id}/websites/${website.id}`, {
+  method: 'DELETE',
+  headers: authorization,
+});
+await request(`${apiUrl}/workspaces/${primaryWorkspace.id}/websites/${bloggerWebsite.id}`, {
   method: 'DELETE',
   headers: authorization,
 });
@@ -186,5 +307,5 @@ await request(`${apiUrl}/auth/logout`, {
 });
 
 console.log(
-  'Full-stack validation passed: API, worker, PostgreSQL, Redis, BullMQ, health, Swagger, web, auth rotation, workspace access, Website CRUD, content profiles, and tenant isolation.',
+  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Mock Blogger OAuth/discovery/selection/sync/import/labels/draft idempotency/safety/disconnect.',
 );

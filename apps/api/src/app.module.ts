@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AuditApiModule } from './modules/audit/audit-api.module';
 import { ContentProfilesModule } from './modules/content-profiles/content-profiles.module';
 import { HealthModule } from './modules/health/health.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { SystemModule } from './modules/system/system.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
@@ -39,6 +40,9 @@ import { WebsitesModule } from './modules/websites/websites.module';
             '*.JWT_ACCESS_SECRET',
             '*.REFRESH_TOKEN_SECRET',
             '*.SEED_OWNER_PASSWORD',
+            '*.GOOGLE_BLOGGER_CLIENT_SECRET',
+            '*.INTEGRATION_ENCRYPTION_KEY',
+            '*.encryptedCredentials',
           ],
           censor: '[REDACTED]',
         },
@@ -65,6 +69,7 @@ import { WebsitesModule } from './modules/websites/websites.module';
     WorkspacesModule,
     WebsitesModule,
     ContentProfilesModule,
+    IntegrationsModule,
     HealthModule,
     SystemModule,
   ],

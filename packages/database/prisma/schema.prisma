@@ -1,7 +1,7 @@
 generator client {
-  provider      = "prisma-client"
-  output        = "../src/generated/prisma"
-  moduleFormat  = "cjs"
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -47,38 +47,101 @@ enum JobRecordStatus {
   FAILED
 }
 
+enum PublishingProviderType {
+  BLOGGER
+  WORDPRESS
+  OTHER
+}
+
+enum IntegrationMode {
+  MOCK
+  LIVE
+}
+
+enum WebsiteConnectionStatus {
+  PENDING
+  CONNECTED
+  DEGRADED
+  EXPIRED
+  REVOKED
+  DISCONNECTED
+}
+
+enum ExternalPostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+  DELETED
+}
+
+enum ExternalTaxonomyType {
+  LABEL
+}
+
+enum IntegrationSyncType {
+  FULL
+  POSTS
+  LABELS
+  TEST
+}
+
+enum IntegrationSyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderPublicationOperation {
+  CREATE_DRAFT
+  UPDATE_POST
+  PUBLISH_POST
+  DELETE_POST
+}
+
+enum ProviderPublicationStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 model User {
-  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email              String            @unique @db.VarChar(320)
-  displayName        String?           @map("display_name") @db.VarChar(120)
-  passwordHash       String            @map("password_hash") @db.VarChar(255)
-  status             UserStatus        @default(ACTIVE)
-  mustChangePassword Boolean           @default(true) @map("must_change_password")
-  securityVersion    Int               @default(1) @map("security_version")
-  lastLoginAt        DateTime?         @map("last_login_at") @db.Timestamptz(3)
-  passwordChangedAt  DateTime?         @map("password_changed_at") @db.Timestamptz(3)
-  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String              @unique @db.VarChar(320)
+  displayName        String?             @map("display_name") @db.VarChar(120)
+  passwordHash       String              @map("password_hash") @db.VarChar(255)
+  status             UserStatus          @default(ACTIVE)
+  mustChangePassword Boolean             @default(true) @map("must_change_password")
+  securityVersion    Int                 @default(1) @map("security_version")
+  lastLoginAt        DateTime?           @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt  DateTime?           @map("password_changed_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   workspaceMembers   WorkspaceMember[]
   sessions           Session[]
-  auditLogs          AuditLog[]        @relation("AuditActor")
+  auditLogs          AuditLog[]          @relation("AuditActor")
+  connectedProviders WebsiteConnection[] @relation("ProviderConnectedBy")
+  oauthStates        OAuthState[]        @relation("OAuthStateUser")
 
   @@map("users")
 }
 
 model Workspace {
-  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name         String            @db.VarChar(120)
-  slug         String            @unique @db.VarChar(100)
-  isActive     Boolean           @default(true) @map("is_active")
-  deactivatedAt DateTime?        @map("deactivated_at") @db.Timestamptz(3)
-  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  members      WorkspaceMember[]
-  websites     Website[]
-  settings     SystemSetting[]
-  auditLogs    AuditLog[]
-  jobRecords   JobRecord[]
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name               String              @db.VarChar(120)
+  slug               String              @unique @db.VarChar(100)
+  isActive           Boolean             @default(true) @map("is_active")
+  deactivatedAt      DateTime?           @map("deactivated_at") @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members            WorkspaceMember[]
+  websites           Website[]
+  settings           SystemSetting[]
+  auditLogs          AuditLog[]
+  jobRecords         JobRecord[]
+  websiteConnections WebsiteConnection[]
+  oauthStates        OAuthState[]
 
   @@map("workspaces")
 }
@@ -99,23 +162,25 @@ model WorkspaceMember {
 }
 
 model Website {
-  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String          @map("workspace_id") @db.Uuid
-  name        String          @db.VarChar(160)
-  slug        String          @db.VarChar(120)
-  platform    WebsitePlatform
-  language    String          @db.VarChar(10)
-  locale      String?         @db.VarChar(35)
-  timezone    String          @db.VarChar(64)
-  description String?         @db.VarChar(1000)
-  status      WebsiteStatus   @default(DRAFT)
-  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  auditLogs   AuditLog[]
-  jobRecords  JobRecord[]
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId     String              @map("workspace_id") @db.Uuid
+  name            String              @db.VarChar(160)
+  slug            String              @db.VarChar(120)
+  platform        WebsitePlatform
+  language        String              @db.VarChar(10)
+  locale          String?             @db.VarChar(35)
+  timezone        String              @db.VarChar(64)
+  description     String?             @db.VarChar(1000)
+  status          WebsiteStatus       @default(DRAFT)
+  deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs       AuditLog[]
+  jobRecords      JobRecord[]
   contentProfiles ContentProfile[]
+  connections     WebsiteConnection[]
+  oauthStates     OAuthState[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
@@ -124,12 +189,12 @@ model Website {
 }
 
 model SystemSetting {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String?   @map("workspace_id") @db.Uuid
-  key         String    @db.VarChar(120)
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String?    @map("workspace_id") @db.Uuid
+  key         String     @db.VarChar(120)
   value       Json
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, key])
@@ -138,22 +203,22 @@ model SystemSetting {
 }
 
 model AuditLog {
-  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId String?    @map("workspace_id") @db.Uuid
-  websiteId   String?    @map("website_id") @db.Uuid
-  actorUserId String?    @map("user_id") @db.Uuid
-  targetType  String?    @map("target_type") @db.VarChar(80)
-  targetId    String?    @map("target_id") @db.Uuid
-  action      String     @db.VarChar(120)
-  requestId   String?    @map("request_id") @db.VarChar(128)
-  correlationId String?  @map("correlation_id") @db.VarChar(128)
-  ipAddress   String?    @map("ip_address") @db.VarChar(64)
-  userAgent   String?    @map("user_agent") @db.VarChar(512)
-  metadata    Json?
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  website     Website?   @relation(fields: [websiteId], references: [id], onDelete: SetNull)
-  actor       User?      @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId   String?    @map("workspace_id") @db.Uuid
+  websiteId     String?    @map("website_id") @db.Uuid
+  actorUserId   String?    @map("user_id") @db.Uuid
+  targetType    String?    @map("target_type") @db.VarChar(80)
+  targetId      String?    @map("target_id") @db.Uuid
+  action        String     @db.VarChar(120)
+  requestId     String?    @map("request_id") @db.VarChar(128)
+  correlationId String?    @map("correlation_id") @db.VarChar(128)
+  ipAddress     String?    @map("ip_address") @db.VarChar(64)
+  userAgent     String?    @map("user_agent") @db.VarChar(512)
+  metadata      Json?
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  website       Website?   @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+  actor         User?      @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
   @@index([websiteId, createdAt])
@@ -226,4 +291,167 @@ model JobRecord {
   @@index([workspaceId, status])
   @@index([websiteId, status])
   @@map("job_records")
+}
+
+model WebsiteConnection {
+  id                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String                  @map("workspace_id") @db.Uuid
+  websiteId            String                  @map("website_id") @db.Uuid
+  provider             PublishingProviderType
+  mode                 IntegrationMode
+  status               WebsiteConnectionStatus @default(PENDING)
+  externalAccountId    String?                 @map("external_account_id") @db.VarChar(255)
+  externalSiteId       String?                 @map("external_site_id") @db.VarChar(255)
+  externalSiteName     String?                 @map("external_site_name") @db.VarChar(255)
+  externalSiteUrl      String?                 @map("external_site_url") @db.VarChar(1000)
+  encryptedCredentials String?                 @map("encrypted_credentials") @db.Text
+  credentialKeyVersion String?                 @map("credential_key_version") @db.VarChar(50)
+  grantedScopes        Json?                   @map("granted_scopes")
+  connectedByUserId    String                  @map("connected_by_user_id") @db.Uuid
+  connectedAt          DateTime?               @map("connected_at") @db.Timestamptz(3)
+  lastTestedAt         DateTime?               @map("last_tested_at") @db.Timestamptz(3)
+  lastSuccessfulSyncAt DateTime?               @map("last_successful_sync_at") @db.Timestamptz(3)
+  expiresAt            DateTime?               @map("expires_at") @db.Timestamptz(3)
+  lastErrorCode        String?                 @map("last_error_code") @db.VarChar(120)
+  lastErrorAt          DateTime?               @map("last_error_at") @db.Timestamptz(3)
+  metadata             Json?
+  revokedAt            DateTime?               @map("revoked_at") @db.Timestamptz(3)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace            Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website              Website                 @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  connectedBy          User                    @relation("ProviderConnectedBy", fields: [connectedByUserId], references: [id], onDelete: Restrict)
+  externalPosts        ExternalPost[]
+  taxonomyTerms        ExternalTaxonomyTerm[]
+  syncRuns             IntegrationSyncRun[]
+  publications         ProviderPublication[]
+
+  @@unique([id, workspaceId, websiteId])
+  @@index([workspaceId, status])
+  @@index([websiteId, provider, status])
+  @@index([provider, externalSiteId])
+  @@map("website_connections")
+}
+
+model OAuthState {
+  id               String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String                 @map("workspace_id") @db.Uuid
+  websiteId        String                 @map("website_id") @db.Uuid
+  userId           String                 @map("user_id") @db.Uuid
+  provider         PublishingProviderType
+  mode             IntegrationMode
+  stateHash        String                 @unique @map("state_hash") @db.Char(64)
+  codeVerifierHash String?                @map("code_verifier_hash") @db.Char(64)
+  redirectAfter    String                 @map("redirect_after") @db.VarChar(500)
+  expiresAt        DateTime               @map("expires_at") @db.Timestamptz(3)
+  consumedAt       DateTime?              @map("consumed_at") @db.Timestamptz(3)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website          Website                @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  user             User                   @relation("OAuthStateUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, websiteId, provider])
+  @@index([expiresAt, consumedAt])
+  @@map("oauth_states")
+}
+
+model ExternalPost {
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId         String                 @map("workspace_id") @db.Uuid
+  websiteId           String                 @map("website_id") @db.Uuid
+  connectionId        String                 @map("connection_id") @db.Uuid
+  provider            PublishingProviderType
+  externalPostId      String                 @map("external_post_id") @db.VarChar(255)
+  externalBlogId      String                 @map("external_blog_id") @db.VarChar(255)
+  title               String                 @db.VarChar(500)
+  slugOrUrl           String?                @map("slug_or_url") @db.VarChar(1500)
+  status              ExternalPostStatus
+  contentHash         String                 @map("content_hash") @db.Char(64)
+  labels              Json
+  publishedAt         DateTime?              @map("published_at") @db.Timestamptz(3)
+  updatedExternallyAt DateTime?              @map("updated_externally_at") @db.Timestamptz(3)
+  lastImportedAt      DateTime               @map("last_imported_at") @db.Timestamptz(3)
+  rawMetadata         Json?                  @map("raw_metadata")
+  deletedExternallyAt DateTime?              @map("deleted_externally_at") @db.Timestamptz(3)
+  createdAt           DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  connection          WebsiteConnection      @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+
+  @@unique([connectionId, provider, externalPostId])
+  @@index([workspaceId, websiteId, status])
+  @@index([connectionId, lastImportedAt])
+  @@map("external_posts")
+}
+
+model ExternalTaxonomyTerm {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId    String                 @map("workspace_id") @db.Uuid
+  websiteId      String                 @map("website_id") @db.Uuid
+  connectionId   String                 @map("connection_id") @db.Uuid
+  provider       PublishingProviderType
+  type           ExternalTaxonomyType
+  name           String                 @db.VarChar(255)
+  normalizedName String                 @map("normalized_name") @db.VarChar(255)
+  usageCount     Int                    @default(0) @map("usage_count")
+  lastSeenAt     DateTime               @map("last_seen_at") @db.Timestamptz(3)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  connection     WebsiteConnection      @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+
+  @@unique([connectionId, provider, type, normalizedName])
+  @@index([workspaceId, websiteId, type])
+  @@map("external_taxonomy_terms")
+}
+
+model IntegrationSyncRun {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String                @map("workspace_id") @db.Uuid
+  websiteId        String                @map("website_id") @db.Uuid
+  connectionId     String                @map("connection_id") @db.Uuid
+  type             IntegrationSyncType   @default(FULL)
+  status           IntegrationSyncStatus @default(PENDING)
+  correlationId    String                @map("correlation_id") @db.Uuid
+  externalJobId    String?               @map("external_job_id") @db.VarChar(120)
+  startedAt        DateTime?             @map("started_at") @db.Timestamptz(3)
+  completedAt      DateTime?             @map("completed_at") @db.Timestamptz(3)
+  cursor           String?               @db.VarChar(500)
+  itemsProcessed   Int                   @default(0) @map("items_processed")
+  itemsCreated     Int                   @default(0) @map("items_created")
+  itemsUpdated     Int                   @default(0) @map("items_updated")
+  itemsFailed      Int                   @default(0) @map("items_failed")
+  errorCode        String?               @map("error_code") @db.VarChar(120)
+  safeErrorMessage String?               @map("safe_error_message") @db.VarChar(500)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  connection       WebsiteConnection     @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+
+  @@unique([correlationId])
+  @@index([workspaceId, websiteId, createdAt])
+  @@index([connectionId, status])
+  @@map("integration_sync_runs")
+}
+
+model ProviderPublication {
+  id             String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId    String                       @map("workspace_id") @db.Uuid
+  websiteId      String                       @map("website_id") @db.Uuid
+  connectionId   String                       @map("connection_id") @db.Uuid
+  provider       PublishingProviderType
+  idempotencyKey String                       @map("idempotency_key") @db.VarChar(160)
+  operationType  ProviderPublicationOperation @map("operation_type")
+  externalPostId String?                      @map("external_post_id") @db.VarChar(255)
+  requestHash    String                       @map("request_hash") @db.Char(64)
+  status         ProviderPublicationStatus    @default(PENDING)
+  attemptCount   Int                          @default(0) @map("attempt_count")
+  lastAttemptAt  DateTime?                    @map("last_attempt_at") @db.Timestamptz(3)
+  completedAt    DateTime?                    @map("completed_at") @db.Timestamptz(3)
+  safeErrorCode  String?                      @map("safe_error_code") @db.VarChar(120)
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  connection     WebsiteConnection            @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+
+  @@unique([connectionId, provider, idempotencyKey])
+  @@index([workspaceId, websiteId, status])
+  @@index([connectionId, externalPostId])
+  @@map("provider_publications")
 }

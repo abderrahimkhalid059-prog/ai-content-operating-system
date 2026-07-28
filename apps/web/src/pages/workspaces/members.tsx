@@ -17,7 +17,7 @@ const roles: WorkspaceRole[] = [
 ];
 
 export function MembersPage(): React.JSX.Element {
-  const { workspaceId = '' } = useParams();
+  const { workspaceId = '' } = useParams<{ workspaceId?: string }>();
   const auth = useAuth();
   const client = useQueryClient();
   const [email, setEmail] = useState('');

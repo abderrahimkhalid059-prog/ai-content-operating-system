@@ -7,7 +7,10 @@ import { useAuth } from '../../auth/auth-context';
 import { Loading } from '../../components/loading';
 
 export function ContentProfilesPage(): React.JSX.Element {
-  const { workspaceId = '', websiteId = '' } = useParams();
+  const { workspaceId = '', websiteId = '' } = useParams<{
+    workspaceId?: string;
+    websiteId?: string;
+  }>();
   const auth = useAuth();
   const client = useQueryClient();
   const [name, setName] = useState('');

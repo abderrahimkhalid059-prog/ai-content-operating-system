@@ -14,3 +14,18 @@ All identifiers are PostgreSQL UUIDs. Prisma uses TypeScript names while tables 
 Session indexes cover `(user_id, revoked_at)`, expiry, and family. Tenant indexes cover membership, website status, content-profile status/default state, and audit chronology. Owner transitions, user deactivation/reset, workspace creation, and default-profile changes are transactional.
 
 Pre-Phase-1 users receive a non-login sentinel hash and `must_change_password=true`; an explicit development seed or authorized administrative reset must establish an Argon2id credential.
+
+# Phase 2 integration records
+
+`WebsiteConnection` scopes a provider account/blog to both Workspace and Website. A partial unique
+index permits one non-revoked Blogger connection per Website. `OAuthState` stores only a SHA-256
+state hash with user/workspace/website binding, expiry and one-time consumption.
+
+`ExternalPost` uniquely snapshots `(connection, provider, externalPostId)` and preserves hashes,
+labels and external timestamps. Missing remote records are marked deleted. `ExternalTaxonomyTerm`
+deduplicates normalized Blogger labels while retaining display names and usage counts.
+
+`IntegrationSyncRun` tracks queue correlation, cursor, counters and safe failure state; a partial
+index prevents two active runs per connection. `ProviderPublication` uniquely reserves idempotency
+keys and request hashes before external mutations. All tenant records include Workspace and Website
+foreign keys. Phase 2 migration `20260728110000_phase_2_blogger_integration` is additive.

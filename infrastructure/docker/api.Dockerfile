@@ -7,6 +7,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/database/package.json packages/database/package.json
+COPY packages/integrations/package.json packages/integrations/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/testing/package.json packages/testing/package.json
 RUN npm ci
@@ -19,6 +20,7 @@ FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/apps/api/dist ./apps/api/dist
@@ -29,6 +31,7 @@ RUN rm -rf node_modules/@ai-content-os \
   && ln -s ../../packages/config node_modules/@ai-content-os/config \
   && ln -s ../../packages/contracts node_modules/@ai-content-os/contracts \
   && ln -s ../../packages/database node_modules/@ai-content-os/database \
+  && ln -s ../../packages/integrations node_modules/@ai-content-os/integrations \
   && ln -s ../../packages/shared node_modules/@ai-content-os/shared \
   && ln -s ../../packages/testing node_modules/@ai-content-os/testing
 USER node

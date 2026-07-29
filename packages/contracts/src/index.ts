@@ -275,6 +275,9 @@ export type MockProviderSimulation =
 export interface ProviderConnectionContext {
   connectionId: string;
   mode: ProviderMode;
+  workspaceId?: string;
+  websiteId?: string;
+  correlationId?: string;
   credentials?: ProviderCredential;
   externalAccountId?: string;
   externalSiteId?: string;

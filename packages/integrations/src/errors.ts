@@ -15,6 +15,7 @@ export class ProviderError extends Error {
     message: string,
     readonly retryable = false,
     readonly status?: number,
+    readonly reason?: string,
   ) {
     super(message);
     this.name = 'ProviderError';

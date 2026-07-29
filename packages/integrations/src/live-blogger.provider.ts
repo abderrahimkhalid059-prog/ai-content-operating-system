@@ -69,6 +69,19 @@ export interface LiveBloggerConfig {
   timeoutMs: number;
 }
 
+export interface BloggerProviderDiagnostic {
+  operation: string;
+  googleHttpStatus: number;
+  connectionId: string;
+  workspaceId?: string;
+  websiteId?: string;
+  requestId?: string;
+  googleReason?: string;
+  returnedBlogs?: number;
+}
+
+export type BloggerProviderDiagnosticSink = (diagnostic: BloggerProviderDiagnostic) => void;
+
 interface GoogleTokenResponse {
   access_token?: string;
   refresh_token?: string;
@@ -83,6 +96,16 @@ interface GoogleBlog {
   url: string;
   locale?: { language?: string };
   description?: string;
+}
+
+interface GoogleBlogList {
+  kind: 'blogger#blogList';
+  items?: GoogleBlog[];
+}
+
+interface GoogleUser {
+  kind: 'blogger#user';
+  id: string;
 }
 
 interface GooglePost {
@@ -101,6 +124,7 @@ export class LiveBloggerProvider implements PublishingProvider {
   constructor(
     private readonly config: LiveBloggerConfig,
     private readonly transport: HttpTransport = new FetchHttpTransport(),
+    private readonly diagnostics: BloggerProviderDiagnosticSink = () => undefined,
   ) {}
 
   getAuthorizationUrl(input: AuthorizationRequest): Promise<AuthorizationUrlResult> {
@@ -190,20 +214,78 @@ export class LiveBloggerProvider implements PublishingProvider {
 
   async listSites(
     connection: ProviderConnectionContext,
-    pagination: ProviderPaginationInput = {},
+    pagination?: ProviderPaginationInput,
   ): Promise<ProviderSitePage> {
-    const url = new URL(`${this.config.apiBaseUrl}/users/self/blogs`);
-    url.searchParams.set('fetchUserInfo', 'true');
-    if (pagination.pageSize) url.searchParams.set('maxResults', String(pagination.pageSize));
-    if (pagination.pageToken) url.searchParams.set('pageToken', pagination.pageToken);
-    const result = await this.request<{ items?: GoogleBlog[]; nextPageToken?: string }>(
+    void pagination;
+    const identityUrl = new URL(`${this.apiBaseUrl()}/users/self`);
+    const identityResponse = await this.discoveryResponse(
       connection,
-      url,
+      identityUrl,
+      'blogger.users.self',
     );
+    const identityReason = this.googleReason(identityResponse.body);
+    if (identityResponse.status < 200 || identityResponse.status >= 300) {
+      this.diagnostic(connection, 'blogger.users.self', identityResponse.status, {
+        ...(identityReason ? { reason: identityReason } : {}),
+      });
+    }
+    this.assertSuccess(identityResponse.status, 'identity', identityResponse.body);
+    if (!this.isGoogleUser(identityResponse.body)) {
+      this.diagnostic(connection, 'blogger.users.self', identityResponse.status, {
+        reason: 'malformed_response',
+      });
+      throw this.malformedResponse();
+    }
+    this.diagnostic(connection, 'blogger.users.self', identityResponse.status);
+
+    const blogsUrl = new URL(`${this.apiBaseUrl()}/users/self/blogs`);
+    const blogsResponse = await this.discoveryResponse(
+      connection,
+      blogsUrl,
+      'blogger.users.self.blogs',
+    );
+    const blogsReason = this.googleReason(blogsResponse.body);
+    if (blogsResponse.status < 200 || blogsResponse.status >= 300) {
+      this.diagnostic(connection, 'blogger.users.self.blogs', blogsResponse.status, {
+        ...(blogsReason ? { reason: blogsReason } : {}),
+      });
+    }
+    this.assertSuccess(blogsResponse.status, 'sites', blogsResponse.body);
+    if (!this.isGoogleBlogList(blogsResponse.body)) {
+      this.diagnostic(connection, 'blogger.users.self.blogs', blogsResponse.status, {
+        reason: 'malformed_response',
+      });
+      throw this.malformedResponse();
+    }
+    const items = blogsResponse.body.items ?? [];
+    this.diagnostic(connection, 'blogger.users.self.blogs', blogsResponse.status, {
+      returnedBlogs: items.length,
+    });
     return {
-      items: (result.items ?? []).map((site) => this.site(site)),
-      ...(result.nextPageToken ? { nextPageToken: result.nextPageToken } : {}),
+      items: items.map((site) => this.site(site)),
     };
+  }
+
+  private async discoveryResponse(
+    connection: ProviderConnectionContext,
+    url: URL,
+    operation: string,
+  ): Promise<HttpResponse<unknown>> {
+    try {
+      return await this.response<unknown>(connection, url);
+    } catch (error) {
+      const reason =
+        error instanceof ProviderError ? (error.reason ?? error.code) : 'network_failure';
+      this.diagnostic(
+        connection,
+        operation,
+        error instanceof ProviderError ? (error.status ?? 0) : 0,
+        {
+          reason,
+        },
+      );
+      throw error;
+    }
   }
 
   async getSite(
@@ -355,6 +437,16 @@ export class LiveBloggerProvider implements PublishingProvider {
     init?: Pick<HttpRequest, 'method' | 'body'>,
     resource?: 'site' | 'post',
   ): Promise<T> {
+    const result = await this.response<T>(connection, url, init);
+    this.assertSuccess(result.status, resource, result.body);
+    return result.body;
+  }
+
+  private async response<T>(
+    connection: ProviderConnectionContext,
+    url: URL,
+    init?: Pick<HttpRequest, 'method' | 'body'>,
+  ): Promise<HttpResponse<T>> {
     const accessToken = connection.credentials?.accessToken;
     if (!accessToken) {
       throw new ProviderError(
@@ -362,7 +454,7 @@ export class LiveBloggerProvider implements PublishingProvider {
         'The Blogger connection has no usable access credential.',
       );
     }
-    const result = await this.transport.request<T>({
+    return this.transport.request<T>({
       url: url.toString(),
       timeoutMs: this.config.timeoutMs,
       ...(init?.method ? { method: init.method } : {}),
@@ -373,36 +465,144 @@ export class LiveBloggerProvider implements PublishingProvider {
         ...(init?.body ? { 'content-type': 'application/json' } : {}),
       },
     });
-    this.assertSuccess(result.status, resource);
-    return result.body;
   }
 
-  private assertSuccess(status: number, resource?: string): void {
+  private assertSuccess(status: number, resource?: string, body?: unknown): void {
     if (status >= 200 && status < 300) return;
+    const reason = this.googleReason(body);
     if (status === 401)
-      throw new ProviderError('BLOGGER_ACCOUNT_UNAUTHORIZED', 'Google authorization failed.');
-    if (status === 403)
-      throw new ProviderError('BLOGGER_PERMISSION_DENIED', 'Blogger permission was denied.');
+      throw new ProviderError(
+        'BLOGGER_ACCOUNT_UNAUTHORIZED',
+        'Google authorization failed.',
+        false,
+        status,
+        reason,
+      );
+    if (status === 403) {
+      const apiDisabled = reason
+        ? ['accessnotconfigured', 'service_disabled', 'api_disabled'].includes(reason.toLowerCase())
+        : false;
+      throw new ProviderError(
+        'BLOGGER_PERMISSION_DENIED',
+        apiDisabled
+          ? 'The Blogger API is not enabled for this Google project.'
+          : 'Blogger permission was denied.',
+        false,
+        status,
+        reason,
+      );
+    }
     if (status === 404)
       throw new ProviderError(
         resource === 'post' ? 'BLOGGER_POST_NOT_FOUND' : 'BLOGGER_BLOG_NOT_FOUND',
         resource === 'post' ? 'Blogger post was not found.' : 'Blogger site was not found.',
+        false,
+        status,
+        reason,
       );
     if (status === 429)
-      throw new ProviderError('BLOGGER_RATE_LIMITED', 'Blogger rate limit reached.', true, status);
+      throw new ProviderError(
+        'BLOGGER_RATE_LIMITED',
+        'Blogger rate limit reached.',
+        true,
+        status,
+        reason,
+      );
     if (status >= 500)
       throw new ProviderError(
         'BLOGGER_UPSTREAM_UNAVAILABLE',
         'Blogger is temporarily unavailable.',
         true,
         status,
+        reason,
       );
     throw new ProviderError(
       'BLOGGER_UPSTREAM_UNAVAILABLE',
       'Blogger request failed.',
       false,
       status,
+      reason,
     );
+  }
+
+  private apiBaseUrl(): string {
+    return this.config.apiBaseUrl.replace(/\/+$/, '');
+  }
+
+  private isGoogleUser(body: unknown): body is GoogleUser {
+    return (
+      this.isRecord(body) &&
+      body.kind === 'blogger#user' &&
+      typeof body.id === 'string' &&
+      body.id.length > 0
+    );
+  }
+
+  private isGoogleBlogList(body: unknown): body is GoogleBlogList {
+    if (!this.isRecord(body) || body.kind !== 'blogger#blogList') return false;
+    if (body.items === undefined) return true;
+    return (
+      Array.isArray(body.items) &&
+      body.items.every(
+        (item) =>
+          this.isRecord(item) &&
+          typeof item.id === 'string' &&
+          item.id.length > 0 &&
+          typeof item.name === 'string' &&
+          item.name.length > 0 &&
+          typeof item.url === 'string' &&
+          item.url.length > 0,
+      )
+    );
+  }
+
+  private googleReason(body: unknown): string | undefined {
+    if (!this.isRecord(body) || !this.isRecord(body.error)) return undefined;
+    const error = body.error;
+    const errors = Array.isArray(error.errors) ? error.errors : [];
+    const details = Array.isArray(error.details) ? error.details : [];
+    const firstError = errors.find((value) => this.isRecord(value));
+    const firstDetail = details.find((value) => this.isRecord(value));
+    const candidate =
+      (this.isRecord(firstError) ? firstError.reason : undefined) ??
+      (this.isRecord(firstDetail) ? firstDetail.reason : undefined) ??
+      error.status ??
+      error.code;
+    if (typeof candidate !== 'string' && typeof candidate !== 'number') return undefined;
+    const reason = String(candidate);
+    return reason.length <= 100 && /^[A-Za-z0-9._:-]+$/.test(reason) ? reason : undefined;
+  }
+
+  private diagnostic(
+    connection: ProviderConnectionContext,
+    operation: string,
+    googleHttpStatus: number,
+    details: { reason?: string; returnedBlogs?: number } = {},
+  ): void {
+    this.diagnostics({
+      operation,
+      googleHttpStatus,
+      connectionId: connection.connectionId,
+      ...(connection.workspaceId ? { workspaceId: connection.workspaceId } : {}),
+      ...(connection.websiteId ? { websiteId: connection.websiteId } : {}),
+      ...(connection.correlationId ? { requestId: connection.correlationId } : {}),
+      ...(details.reason ? { googleReason: details.reason } : {}),
+      ...(details.returnedBlogs !== undefined ? { returnedBlogs: details.returnedBlogs } : {}),
+    });
+  }
+
+  private malformedResponse(): ProviderError {
+    return new ProviderError(
+      'BLOGGER_UPSTREAM_UNAVAILABLE',
+      'Google returned a malformed Blogger response.',
+      false,
+      502,
+      'malformed_response',
+    );
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 
   private credentials(body: GoogleTokenResponse): ProviderCredential {

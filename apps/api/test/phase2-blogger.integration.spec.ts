@@ -1,20 +1,24 @@
+import { createHash } from 'node:crypto';
 import type { Server } from 'node:http';
 import { ValidationPipe, VersioningType, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import {
   DatabaseService,
   UserStatus,
+  WebsiteConnectionStatus,
   WebsitePlatform,
   WebsiteStatus,
   WorkspaceRole,
 } from '@ai-content-os/database';
+import { ProviderError } from '@ai-content-os/integrations';
 import { argon2id, hash } from 'argon2';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { RequestIdMiddleware } from '../src/common/middleware/request-id.middleware';
+import { BloggerProviderFactory } from '../src/modules/integrations/blogger-provider.factory';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const redisUrl = process.env.TEST_REDIS_URL;
@@ -137,6 +141,7 @@ describe('Phase 2 Blogger API integration', () => {
       publicPublishEnabled: true,
       deleteEnabled: true,
     });
+    expect(status.headers['cache-control']).toBe('no-store, private');
     expect(JSON.stringify(status.body)).not.toMatch(/token|secret|credential/i);
     await request(server)
       .get(`${scoped(workspaceA, websiteA)}/integrations`)
@@ -174,21 +179,56 @@ describe('Phase 2 Blogger API integration', () => {
     const state = authorizationUrl.searchParams.get('state');
     const code = authorizationUrl.searchParams.get('code');
     expect(state).toBeTruthy();
+    expect(code).toBeTruthy();
+    const invalidIssuer = await request(server)
+      .get('/api/v1/integrations/blogger/callback')
+      .query({ state, code, iss: 'https://accounts.example.test' })
+      .expect(400);
+    expect(invalidIssuer.body.error.code).toBe('VALIDATION_ERROR');
+    expect(JSON.stringify(invalidIssuer.body)).not.toContain(state);
+    expect(JSON.stringify(invalidIssuer.body)).not.toContain(code);
+    const unknownProperty = await request(server)
+      .get('/api/v1/integrations/blogger/callback')
+      .query({ state, code, unexpected: 'rejected' })
+      .expect(400);
+    expect(unknownProperty.body.error.code).toBe('VALIDATION_ERROR');
     await request(server)
       .get('/api/v1/integrations/blogger/callback')
-      .query({ state, code })
+      .query({
+        state,
+        code,
+        scope: 'https://www.googleapis.com/auth/blogger',
+        iss: 'https://accounts.google.com',
+        authuser: '0',
+        prompt: 'consent',
+      })
       .expect(302);
     const replay = await request(server)
       .get('/api/v1/integrations/blogger/callback')
-      .query({ state, code })
+      .query({ state, code, iss: 'https://accounts.google.com' })
       .expect(400);
     expect(replay.body.error.code).toBe('INTEGRATION_OAUTH_STATE_REUSED');
+    expect(JSON.stringify(replay.body)).not.toContain(state);
+    expect(JSON.stringify(replay.body)).not.toContain(code);
+    const invalidState = 'invalid-oauth-state-value-0001';
+    const invalidStateResponse = await request(server)
+      .get('/api/v1/integrations/blogger/callback')
+      .query({
+        state: invalidState,
+        code: 'invalid-state-secret-code',
+        iss: 'https://accounts.google.com',
+      })
+      .expect(400);
+    expect(invalidStateResponse.body.error.code).toBe('INTEGRATION_OAUTH_STATE_INVALID');
+    expect(JSON.stringify(invalidStateResponse.body)).not.toContain(invalidState);
+    expect(JSON.stringify(invalidStateResponse.body)).not.toContain('invalid-state-secret-code');
     const sites = await request(server)
       .get(`${scoped(workspaceA, websiteA)}/integrations/blogger/sites?pageSize=1`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200);
     expect(sites.body.items).toHaveLength(1);
     expect(sites.body.nextPageToken).toBeTruthy();
+    expect(sites.headers['cache-control']).toBe('no-store, private');
     await request(server)
       .post(`${scoped(workspaceA, websiteA)}/integrations/blogger/select-site`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -283,5 +323,131 @@ describe('Phase 2 Blogger API integration', () => {
       .send({ externalSiteId: 'mock-blog-sports-001' })
       .expect(409);
     expect(duplicate.body.error.code).toBe('BLOGGER_DUPLICATE_OPERATION');
+  });
+
+  it('expires an unrecoverable connection, creates a fresh bound OAuth state, and disconnects locally', async () => {
+    const providers = app.get(BloggerProviderFactory);
+    const connection = await database.websiteConnection.findFirstOrThrow({
+      where: {
+        workspaceId: workspaceA,
+        websiteId: websiteA,
+        revokedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const encryptedCredentials = providers.encryption.encrypt({
+      accessToken: 'expired-access-token-must-not-leak',
+      refreshToken: 'expired-refresh-token-must-not-leak',
+      scopes: ['https://www.googleapis.com/auth/blogger'],
+    });
+    await database.websiteConnection.update({
+      where: { id: connection.id },
+      data: {
+        status: WebsiteConnectionStatus.CONNECTED,
+        encryptedCredentials,
+        credentialKeyVersion: providers.encryption.keyVersion,
+      },
+    });
+    const mockProvider = providers.forMode('MOCK');
+    const discovery = vi
+      .spyOn(mockProvider, 'listSites')
+      .mockRejectedValueOnce(
+        new ProviderError(
+          'BLOGGER_ACCOUNT_UNAUTHORIZED',
+          'Google authorization failed.',
+          false,
+          401,
+          'invalidCredentials',
+        ),
+      );
+    const unauthorized = await request(server)
+      .get(`${scoped(workspaceA, websiteA)}/integrations/blogger/sites`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(401);
+    discovery.mockRestore();
+    expect(unauthorized.body.error.code).toBe('BLOGGER_ACCOUNT_UNAUTHORIZED');
+    expect(JSON.stringify(unauthorized.body)).not.toMatch(
+      /expired-access-token-must-not-leak|expired-refresh-token-must-not-leak/,
+    );
+    const expired = await database.websiteConnection.findUniqueOrThrow({
+      where: { id: connection.id },
+    });
+    expect(expired.status).toBe(WebsiteConnectionStatus.EXPIRED);
+    expect(expired.lastErrorCode).toBe('BLOGGER_ACCOUNT_UNAUTHORIZED');
+    expect(expired.encryptedCredentials).toBe(encryptedCredentials);
+    expect(expired.credentialKeyVersion).toBe(providers.encryption.keyVersion);
+
+    const previousStateHashes = new Set(
+      (
+        await database.oAuthState.findMany({
+          where: { workspaceId: workspaceA, websiteId: websiteA },
+          select: { stateHash: true },
+        })
+      ).map(({ stateHash }) => stateHash),
+    );
+    const reconnect = await request(server)
+      .post(`${scoped(workspaceA, websiteA)}/integrations/blogger/connect`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        redirectAfter: `/espaces/${workspaceA}/sites/${websiteA}/integrations/blogger`,
+        replaceExisting: true,
+      })
+      .expect(201);
+    const authorizationUrl = new URL(reconnect.body.authorizationUrl as string);
+    const state = authorizationUrl.searchParams.get('state');
+    const code = authorizationUrl.searchParams.get('code');
+    expect(state).toBeTruthy();
+    expect(code).toBeTruthy();
+    const stateHash = createHash('sha256').update(state!).digest('hex');
+    expect(previousStateHashes.has(stateHash)).toBe(false);
+    const storedState = await database.oAuthState.findUniqueOrThrow({ where: { stateHash } });
+    expect(storedState).toMatchObject({
+      workspaceId: workspaceA,
+      websiteId: websiteA,
+      userId: connection.connectedByUserId,
+      consumedAt: null,
+    });
+
+    await request(server)
+      .get('/api/v1/integrations/blogger/callback')
+      .query({ state, code })
+      .expect(302);
+    const localConnection = await database.websiteConnection.findFirstOrThrow({
+      where: {
+        workspaceId: workspaceA,
+        websiteId: websiteA,
+        revokedAt: null,
+        status: WebsiteConnectionStatus.CONNECTED,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(localConnection.encryptedCredentials).toBeNull();
+    const [postCount, auditCount] = await Promise.all([
+      database.externalPost.count({ where: { workspaceId: workspaceA, websiteId: websiteA } }),
+      database.auditLog.count({ where: { workspaceId: workspaceA, websiteId: websiteA } }),
+    ]);
+    const providerLookup = vi.spyOn(providers, 'forMode');
+    await request(server)
+      .delete(`${scoped(workspaceA, websiteA)}/integrations/blogger`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
+    expect(providerLookup).not.toHaveBeenCalled();
+    providerLookup.mockRestore();
+    expect(
+      await database.externalPost.count({
+        where: { workspaceId: workspaceA, websiteId: websiteA },
+      }),
+    ).toBe(postCount);
+    expect(
+      await database.auditLog.count({ where: { workspaceId: workspaceA, websiteId: websiteA } }),
+    ).toBeGreaterThan(auditCount);
+    expect(
+      await database.website.findFirst({ where: { id: websiteA, workspaceId: workspaceA } }),
+    ).not.toBeNull();
+    const disconnected = await database.websiteConnection.findUniqueOrThrow({
+      where: { id: localConnection.id },
+    });
+    expect(disconnected.status).toBe(WebsiteConnectionStatus.DISCONNECTED);
+    expect(disconnected.revokedAt).not.toBeNull();
   });
 });

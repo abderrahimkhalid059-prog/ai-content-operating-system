@@ -37,6 +37,7 @@ class ContractTransport implements HttpTransport {
       return Promise.resolve({
         status: 200,
         body: {
+          kind: 'blogger#blogList',
           items: [
             {
               id: 'live-blog-1',
@@ -46,6 +47,12 @@ class ContractTransport implements HttpTransport {
             },
           ],
         } as T,
+      });
+    }
+    if (url.pathname.endsWith('/users/self')) {
+      return Promise.resolve({
+        status: 200,
+        body: { kind: 'blogger#user', id: 'google-account' } as T,
       });
     }
     if (/\/blogs\/[^/]+$/.test(url.pathname)) {
@@ -117,6 +124,11 @@ function runContract(
         scopes: ['blogger'],
       });
       expect(auth.url).toContain('state=one-time-state');
+      if (label === 'live') {
+        const authorizationUrl = new URL(auth.url);
+        expect(authorizationUrl.searchParams.get('access_type')).toBe('offline');
+        expect(authorizationUrl.searchParams.get('prompt')).toBe('consent');
+      }
       const callback = await provider.handleAuthorizationCallback({
         code: label === 'mock' ? 'mock-authorization-code' : 'contract-code',
         state: 'one-time-state',
@@ -213,6 +225,7 @@ runContract(
 
 describe('structured provider errors', () => {
   it.each([
+    [401, 'BLOGGER_ACCOUNT_UNAUTHORIZED'],
     [403, 'BLOGGER_PERMISSION_DENIED'],
     [404, 'BLOGGER_BLOG_NOT_FOUND'],
     [429, 'BLOGGER_RATE_LIMITED'],
@@ -252,6 +265,164 @@ describe('structured provider errors', () => {
     await expect(failedRefresh()).rejects.toMatchObject({
       code: 'BLOGGER_TOKEN_REFRESH_FAILED',
       retryable: false,
+    });
+  });
+});
+
+class SequenceTransport implements HttpTransport {
+  readonly requests: HttpRequest[] = [];
+
+  constructor(private readonly responses: Array<{ status: number; body: unknown }>) {}
+
+  request<T>(input: HttpRequest): Promise<{ status: number; body: T }> {
+    this.requests.push(input);
+    const response = this.responses.shift();
+    if (!response) throw new Error('Unexpected provider request');
+    return Promise.resolve({ status: response.status, body: response.body as T });
+  }
+}
+
+const liveConnection: ProviderConnectionContext = {
+  connectionId: 'connection-safe-id',
+  workspaceId: 'workspace-safe-id',
+  websiteId: 'website-safe-id',
+  correlationId: 'request-safe-id',
+  mode: 'LIVE',
+  credentials: {
+    accessToken: 'access-token-must-not-leak',
+    refreshToken: 'refresh-token-must-not-leak',
+    scopes: ['https://www.googleapis.com/auth/blogger'],
+  },
+};
+
+const googleIdentity = { kind: 'blogger#user', id: 'google-account' };
+const realGoogleBlogList = {
+  kind: 'blogger#blogList',
+  items: [
+    {
+      id: '123456789',
+      name: 'Test Blog',
+      url: 'https://example.blogspot.com/',
+      published: '2020-01-01T00:00:00Z',
+      updated: '2026-01-01T00:00:00Z',
+    },
+  ],
+};
+
+describe('Live Blogger blog discovery', () => {
+  it('verifies identity, calls the exact official endpoint, ignores pagination, and maps items', async () => {
+    const transport = new SequenceTransport([
+      { status: 200, body: googleIdentity },
+      { status: 200, body: realGoogleBlogList },
+    ]);
+    const diagnostics: unknown[] = [];
+    const provider = new LiveBloggerProvider(
+      {
+        ...liveConfig,
+        apiBaseUrl: 'https://www.googleapis.com/blogger/v3',
+      },
+      transport,
+      (diagnostic) => diagnostics.push(diagnostic),
+    );
+
+    const result = await provider.listSites(liveConnection, {
+      pageSize: 1,
+      pageToken: 'unsupported-page-token',
+    });
+
+    expect(transport.requests.map(({ url }) => url)).toEqual([
+      'https://www.googleapis.com/blogger/v3/users/self',
+      'https://www.googleapis.com/blogger/v3/users/self/blogs',
+    ]);
+    expect(transport.requests[1]!.url).not.toContain('?');
+    expect(transport.requests[1]!.headers?.authorization).toBe('Bearer access-token-must-not-leak');
+    expect(result).toEqual({
+      items: [
+        {
+          id: '123456789',
+          name: 'Test Blog',
+          url: 'https://example.blogspot.com/',
+        },
+      ],
+    });
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        operation: 'blogger.users.self',
+        googleHttpStatus: 200,
+        connectionId: 'connection-safe-id',
+        requestId: 'request-safe-id',
+      }),
+      expect.objectContaining({
+        operation: 'blogger.users.self.blogs',
+        googleHttpStatus: 200,
+        returnedBlogs: 1,
+      }),
+    ]);
+    expect(JSON.stringify(diagnostics)).not.toMatch(
+      /access-token-must-not-leak|refresh-token-must-not-leak|authorization/i,
+    );
+  });
+
+  it('returns an empty list only for a valid successful empty Google response', async () => {
+    const provider = new LiveBloggerProvider(
+      liveConfig,
+      new SequenceTransport([
+        { status: 200, body: googleIdentity },
+        { status: 200, body: { kind: 'blogger#blogList', items: [] } },
+      ]),
+    );
+
+    await expect(provider.listSites(liveConnection)).resolves.toEqual({ items: [] });
+  });
+
+  it.each([
+    [401, 'BLOGGER_ACCOUNT_UNAUTHORIZED'],
+    [403, 'BLOGGER_PERMISSION_DENIED'],
+  ])('does not convert Google HTTP %s into an empty list', async (status, code) => {
+    const provider = new LiveBloggerProvider(
+      liveConfig,
+      new SequenceTransport([{ status, body: { error: { status: code } } }]),
+    );
+
+    await expect(provider.listSites(liveConnection)).rejects.toMatchObject({ code, status });
+  });
+
+  it('surfaces an API-disabled response with a safe provider error', async () => {
+    const provider = new LiveBloggerProvider(
+      liveConfig,
+      new SequenceTransport([
+        {
+          status: 403,
+          body: {
+            error: {
+              errors: [{ reason: 'accessNotConfigured' }],
+              message: 'unsafe upstream detail must not be reflected',
+            },
+          },
+        },
+      ]),
+    );
+
+    await expect(provider.listSites(liveConnection)).rejects.toMatchObject({
+      code: 'BLOGGER_PERMISSION_DENIED',
+      message: 'The Blogger API is not enabled for this Google project.',
+      reason: 'accessNotConfigured',
+    });
+  });
+
+  it('surfaces a malformed successful blog-list response instead of an empty list', async () => {
+    const provider = new LiveBloggerProvider(
+      liveConfig,
+      new SequenceTransport([
+        { status: 200, body: googleIdentity },
+        { status: 200, body: { items: realGoogleBlogList.items } },
+      ]),
+    );
+
+    await expect(provider.listSites(liveConnection)).rejects.toMatchObject({
+      code: 'BLOGGER_UPSTREAM_UNAVAILABLE',
+      status: 502,
+      reason: 'malformed_response',
     });
   });
 });

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -57,6 +58,7 @@ export class PublicIntegrationsController {
 
   @Public()
   @Get('status')
+  @Header('Cache-Control', 'no-store, private')
   @ApiOperation({ summary: 'Expose only safe integration feature flags' })
   status() {
     return this.connections.systemStatus();
@@ -98,6 +100,7 @@ export class BloggerIntegrationsController {
   }
 
   @Get('integrations/blogger')
+  @Header('Cache-Control', 'no-store, private')
   @RequirePermissions('integrations.read')
   integration(
     @CurrentWorkspace() workspace: WorkspaceContext,
@@ -119,6 +122,7 @@ export class BloggerIntegrationsController {
   }
 
   @Get('integrations/blogger/sites')
+  @Header('Cache-Control', 'no-store, private')
   @RequirePermissions('integrations.read')
   sites(
     @CurrentUser() actor: AuthContext,

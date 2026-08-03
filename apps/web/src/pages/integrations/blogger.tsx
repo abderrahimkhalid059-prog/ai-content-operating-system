@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  CurrentBloggerTestPublication,
   DiscoveredBloggerBlog,
   ExternalLabelSummary,
   ExternalPostSummary,
@@ -10,7 +9,7 @@ import type {
   PublicationOperationResult,
   StartBloggerConnectionResult,
 } from '@ai-content-os/contracts';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiClientError, apiRequest } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
@@ -21,28 +20,8 @@ interface SitePage {
   nextPageToken?: string;
 }
 
-const providerErrorMessages: Record<string, string> = {
-  BLOGGER_ACCOUNT_UNAUTHORIZED:
-    'L’autorisation Google a expiré ou n’est plus valide. Reconnectez le compte.',
-  BLOGGER_PERMISSION_DENIED:
-    'Google a refusé l’accès à Blogger. Vérifiez le périmètre autorisé et l’activation de l’API.',
-  BLOGGER_RATE_LIMITED: 'La limite de requêtes Blogger est atteinte. Réessayez plus tard.',
-  BLOGGER_UPSTREAM_UNAVAILABLE:
-    'Blogger est temporairement indisponible. Réessayez dans quelques instants.',
-};
-
 const errorText = (error: unknown) =>
-  error instanceof ApiClientError
-    ? (providerErrorMessages[error.body?.error.code ?? ''] ?? error.message)
-    : 'L’opération Blogger a échoué.';
-
-const defaultDraft = {
-  title: 'Brouillon de validation Blogger',
-  htmlContent: '<p>Contenu de test sans publication autonome.</p>',
-  labels: 'validation, mock',
-};
-
-const normalizedPublicationStatus = (status: string): string => status.trim().toUpperCase();
+  error instanceof ApiClientError ? error.message : 'L’opération Blogger a échoué.';
 
 export function BloggerIntegrationPage(): React.JSX.Element {
   const { workspaceId = '', websiteId = '' } = useParams<{
@@ -52,42 +31,31 @@ export function BloggerIntegrationPage(): React.JSX.Element {
   const auth = useAuth();
   const queryClient = useQueryClient();
   const base = `/workspaces/${workspaceId}/websites/${websiteId}`;
-  const integrationKey = useMemo(
-    () => ['blogger-integration', workspaceId, websiteId] as const,
-    [websiteId, workspaceId],
+  const [title, setTitle] = useState('Brouillon de validation Blogger');
+  const [htmlContent, setHtmlContent] = useState(
+    '<p>Contenu de test sans publication autonome.</p>',
   );
-  const sitesKey = useMemo(
-    () => ['blogger-sites', workspaceId, websiteId] as const,
-    [websiteId, workspaceId],
-  );
-  const currentPublicationKey = useMemo(
-    () => ['blogger-current-test-publication', workspaceId, websiteId] as const,
-    [websiteId, workspaceId],
-  );
-  const [title, setTitle] = useState(defaultDraft.title);
-  const [htmlContent, setHtmlContent] = useState(defaultDraft.htmlContent);
-  const [labels, setLabels] = useState(defaultDraft.labels);
-  const [feedback, setFeedback] = useState<string>();
+  const [labels, setLabels] = useState('validation, mock');
+  const [lastPost, setLastPost] = useState<ExternalPostSummary>();
+  const [pageToken, setPageToken] = useState<string>();
   const status = useQuery({
     queryKey: ['integration-status'],
     queryFn: () => apiRequest<IntegrationSystemStatus>('/integrations/status'),
   });
   const integration = useQuery({
-    queryKey: integrationKey,
+    queryKey: ['blogger-integration', workspaceId, websiteId],
     queryFn: () => apiRequest<IntegrationSummary>(`${base}/integrations/blogger`),
     retry: false,
   });
   const sites = useQuery({
-    queryKey: sitesKey,
+    queryKey: ['blogger-sites', workspaceId, websiteId, pageToken],
     queryFn: () =>
-      apiRequest<SitePage>(`${base}/integrations/blogger/sites`, {
-        cache: 'no-store',
-      }),
-    enabled: Boolean(
-      integration.data && integration.data.status !== 'EXPIRED' && !integration.data.externalSiteId,
-    ),
-    staleTime: 0,
-    refetchOnMount: 'always',
+      apiRequest<SitePage>(
+        `${base}/integrations/blogger/sites?pageSize=1${
+          pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''
+        }`,
+      ),
+    enabled: Boolean(integration.data && !integration.data.externalSiteId),
   });
   const posts = useQuery({
     queryKey: ['external-posts', workspaceId, websiteId],
@@ -109,99 +77,28 @@ export function BloggerIntegrationPage(): React.JSX.Element {
         ? 1_000
         : false,
   });
-  const currentPublication = useQuery({
-    queryKey: currentPublicationKey,
-    queryFn: () =>
-      apiRequest<CurrentBloggerTestPublication | null>(
-        `${base}/integrations/blogger/test-publication/current`,
-        { cache: 'no-store' },
-      ),
-    enabled: Boolean(integration.data?.externalSiteId && integration.data.status !== 'EXPIRED'),
-    staleTime: 0,
-    refetchOnMount: 'always',
-    retry: false,
-  });
-  const currentPublicationReconciledMissing =
-    currentPublication.error instanceof ApiClientError &&
-    currentPublication.error.body?.error.code === 'BLOGGER_POST_NOT_FOUND';
-  const activePublication =
-    currentPublication.data &&
-    normalizedPublicationStatus(currentPublication.data.status) === 'DRAFT'
-      ? currentPublication.data
-      : null;
-  const canCreateDraft = auth.can('providerPublishing.createDraft', workspaceId);
-  const canUpdateDraft = auth.can('providerPublishing.update', workspaceId);
-  const canPublishDraft = auth.can('providerPublishing.publish', workspaceId);
-  const canDeleteDraft = auth.can('providerPublishing.delete', workspaceId);
-  const authorizationError =
-    sites.error instanceof ApiClientError &&
-    ['BLOGGER_ACCOUNT_UNAUTHORIZED', 'INTEGRATION_CONNECTION_EXPIRED'].includes(
-      sites.error.body?.error.code ?? '',
-    );
-  const reauthorizationRequired = integration.data?.status === 'EXPIRED' || authorizationError;
-  const refreshConnectionState = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['integration-status'] }),
-      queryClient.invalidateQueries({ queryKey: integrationKey }),
-      queryClient.invalidateQueries({ queryKey: sitesKey }),
-    ]);
-  };
   const refreshAll = async () => {
     await Promise.all([
-      refreshConnectionState(),
+      queryClient.invalidateQueries({
+        queryKey: ['blogger-integration', workspaceId, websiteId],
+      }),
       queryClient.invalidateQueries({ queryKey: ['external-posts', workspaceId, websiteId] }),
       queryClient.invalidateQueries({ queryKey: ['external-labels', workspaceId, websiteId] }),
       queryClient.invalidateQueries({
         queryKey: ['blogger-sync-runs', workspaceId, websiteId],
       }),
-      queryClient.invalidateQueries({ queryKey: currentPublicationKey }),
     ]);
   };
-  const refreshCurrentPublication = async () => {
-    await queryClient.invalidateQueries({ queryKey: currentPublicationKey });
-    await queryClient.refetchQueries({ queryKey: currentPublicationKey });
-  };
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('blogger') !== 'connected') return;
-    void Promise.all([
-      queryClient.invalidateQueries({ queryKey: integrationKey }),
-      queryClient.invalidateQueries({ queryKey: sitesKey }),
-    ]).then(() =>
-      Promise.all([
-        queryClient.refetchQueries({ queryKey: integrationKey }),
-        queryClient.refetchQueries({ queryKey: sitesKey }),
-      ]),
-    );
-  }, [integrationKey, queryClient, sitesKey]);
-  useEffect(() => {
-    if (!authorizationError) return;
-    void queryClient.invalidateQueries({ queryKey: integrationKey });
-  }, [authorizationError, integrationKey, queryClient]);
-  useEffect(() => {
-    if (!currentPublication.isSuccess) return;
-    if (activePublication) {
-      setTitle(activePublication.title);
-      setHtmlContent(activePublication.htmlContent);
-      setLabels(activePublication.labels.join(', '));
-      return;
-    }
-    setTitle(defaultDraft.title);
-    setHtmlContent(defaultDraft.htmlContent);
-    setLabels(defaultDraft.labels);
-  }, [activePublication, currentPublication.isSuccess]);
   const connect = useMutation({
     mutationFn: () =>
       apiRequest<StartBloggerConnectionResult>(`${base}/integrations/blogger/connect`, {
         method: 'POST',
         body: JSON.stringify({
           redirectAfter: `/espaces/${workspaceId}/sites/${websiteId}/integrations/blogger`,
-          replaceExisting: Boolean(integration.data),
+          replaceExisting: integration.data?.status === 'DISCONNECTED',
         }),
       }),
-    onSuccess: async (result) => {
-      await refreshConnectionState();
-      window.location.assign(result.authorizationUrl);
-    },
+    onSuccess: (result) => window.location.assign(result.authorizationUrl),
   });
   const selectSite = useMutation({
     mutationFn: (externalSiteId: string) =>
@@ -217,11 +114,7 @@ export function BloggerIntegrationPage(): React.JSX.Element {
   });
   const disconnect = useMutation({
     mutationFn: () => apiRequest<void>(`${base}/integrations/blogger`, { method: 'DELETE' }),
-    onSuccess: async () => {
-      queryClient.setQueryData<IntegrationSummary | null>(integrationKey, null);
-      queryClient.removeQueries({ queryKey: sitesKey });
-      await refreshConnectionState();
-    },
+    onSuccess: refreshAll,
   });
   const createDraft = useMutation({
     mutationFn: () =>
@@ -238,32 +131,28 @@ export function BloggerIntegrationPage(): React.JSX.Element {
         }),
       }),
     onSuccess: async (result) => {
-      void result;
-      setFeedback('Brouillon créé avec succès.');
-      await refreshCurrentPublication();
+      setLastPost(result.post);
       await refreshAll();
     },
   });
   const publish = useMutation({
-    mutationFn: () =>
+    mutationFn: (postId: string) =>
       apiRequest<PublicationOperationResult>(
-        `${base}/integrations/blogger/test-publication/current/publish`,
+        `${base}/integrations/blogger/test-posts/${encodeURIComponent(postId)}/publish`,
         {
           method: 'POST',
           body: JSON.stringify({ idempotencyKey: `ui-publish-${crypto.randomUUID()}` }),
         },
       ),
     onSuccess: async (result) => {
-      void result;
-      setFeedback('Brouillon publié avec succès.');
-      await refreshCurrentPublication();
+      setLastPost(result.post);
       await refreshAll();
     },
   });
   const updateDraft = useMutation({
-    mutationFn: () =>
+    mutationFn: (postId: string) =>
       apiRequest<PublicationOperationResult>(
-        `${base}/integrations/blogger/test-publication/current`,
+        `${base}/integrations/blogger/test-posts/${encodeURIComponent(postId)}`,
         {
           method: 'PATCH',
           body: JSON.stringify({
@@ -278,21 +167,18 @@ export function BloggerIntegrationPage(): React.JSX.Element {
         },
       ),
     onSuccess: async (result) => {
-      void result;
-      setFeedback('Brouillon mis à jour avec succès.');
-      await refreshCurrentPublication();
+      setLastPost(result.post);
       await refreshAll();
     },
   });
   const remove = useMutation({
-    mutationFn: () =>
-      apiRequest<void>(`${base}/integrations/blogger/test-publication/current`, {
+    mutationFn: (postId: string) =>
+      apiRequest<void>(`${base}/integrations/blogger/test-posts/${encodeURIComponent(postId)}`, {
         method: 'DELETE',
         body: JSON.stringify({ idempotencyKey: `ui-delete-${crypto.randomUUID()}` }),
       }),
     onSuccess: async () => {
-      setFeedback('Brouillon de test supprimé avec succès.');
-      await refreshCurrentPublication();
+      setLastPost(undefined);
       await refreshAll();
     },
   });
@@ -340,7 +226,7 @@ export function BloggerIntegrationPage(): React.JSX.Element {
           <div className="status-grid">
             <article className="status-card">
               <span className="eyebrow">État</span>
-              <h2>{reauthorizationRequired ? 'AUTORISATION EXPIRÉE' : integration.data.status}</h2>
+              <h2>{integration.data.status}</h2>
               <p>{integration.data.externalSiteName ?? 'Blog à sélectionner'}</p>
             </article>
             <article className="status-card">
@@ -358,31 +244,43 @@ export function BloggerIntegrationPage(): React.JSX.Element {
               <p>{integration.data.lastErrorCode ?? 'Aucune erreur active'}</p>
             </article>
           </div>
-          <div className="panel section-gap">
-            <h2>Contrôles de connexion</h2>
-            {reauthorizationRequired && (
-              <p role="status">
-                <strong>AUTORISATION EXPIRÉE</strong> · Reconnectez Blogger pour rétablir l’accès
-                Google.
-              </p>
-            )}
-            {authorizationError && (
-              <div className="inline-error" role="alert">
-                {errorText(sites.error)}
-              </div>
-            )}
-            <div className="button-row">
-              {auth.can('integrations.connect', workspaceId) && (
+          {!integration.data.externalSiteId && (
+            <div className="panel section-gap">
+              <h2>Sélectionner un blog</h2>
+              {sites.data?.items.map((site) => (
+                <div className="selection-row" key={site.id}>
+                  <div>
+                    <strong>{site.name}</strong>
+                    <small>{site.url}</small>
+                  </div>
+                  <button className="primary-button" onClick={() => selectSite.mutate(site.id)}>
+                    Sélectionner
+                  </button>
+                </div>
+              ))}
+              <div className="button-row">
                 <button
-                  className="primary-button"
-                  disabled={connect.isPending}
-                  onClick={() => connect.mutate()}
+                  className="secondary-button"
+                  disabled={!pageToken}
+                  onClick={() => setPageToken(undefined)}
                 >
-                  Reconnecter Blogger
+                  Première page
                 </button>
-              )}
-              {integration.data.externalSiteId && !reauthorizationRequired && (
-                <>
+                <button
+                  className="secondary-button"
+                  disabled={!sites.data?.nextPageToken}
+                  onClick={() => setPageToken(sites.data?.nextPageToken)}
+                >
+                  Page suivante
+                </button>
+              </div>
+            </div>
+          )}
+          {integration.data.externalSiteId && (
+            <>
+              <div className="panel section-gap">
+                <h2>Contrôles de connexion</h2>
+                <div className="button-row">
                   <button
                     className="secondary-button"
                     onClick={() => action.mutate('/integrations/blogger/test')}
@@ -401,49 +299,11 @@ export function BloggerIntegrationPage(): React.JSX.Element {
                   >
                     Importer maintenant
                   </button>
-                </>
-              )}
-              {auth.can('integrations.disconnect', workspaceId) && (
-                <button
-                  className="danger-button"
-                  disabled={disconnect.isPending}
-                  onClick={() => disconnect.mutate()}
-                >
-                  Déconnecter
-                </button>
-              )}
-            </div>
-          </div>
-          {!integration.data.externalSiteId && !reauthorizationRequired && (
-            <div className="panel section-gap">
-              <h2>Sélectionner un blog</h2>
-              {(sites.isPending || sites.isFetching) && (
-                <p role="status">Recherche des blogs Blogger…</p>
-              )}
-              {!sites.isFetching && sites.isError && (
-                <div className="inline-error" role="alert">
-                  {errorText(sites.error)}
+                  <button className="danger-button" onClick={() => disconnect.mutate()}>
+                    Déconnecter
+                  </button>
                 </div>
-              )}
-              {!sites.isFetching && sites.isSuccess && sites.data.items.length === 0 && (
-                <p>Aucun blog Blogger n’a été trouvé pour ce compte Google.</p>
-              )}
-              {!sites.isFetching &&
-                sites.data?.items.map((site) => (
-                  <div className="selection-row" key={site.id}>
-                    <div>
-                      <strong>{site.name}</strong>
-                      <small>{site.url}</small>
-                    </div>
-                    <button className="primary-button" onClick={() => selectSite.mutate(site.id)}>
-                      Sélectionner
-                    </button>
-                  </div>
-                ))}
-            </div>
-          )}
-          {integration.data.externalSiteId && (
-            <>
+              </div>
               <div className="panel section-gap">
                 <h2>Billets importés</h2>
                 <div className="table-wrap">
@@ -489,26 +349,6 @@ export function BloggerIntegrationPage(): React.JSX.Element {
                   La création reste en brouillon. Publier ou supprimer exige le garde-fou serveur
                   correspondant.
                 </p>
-                {currentPublication.isFetching && (
-                  <p role="status">Récupération du brouillon de test…</p>
-                )}
-                {currentPublication.isError && (
-                  <div className="inline-error" role="alert">
-                    {errorText(currentPublication.error)}
-                  </div>
-                )}
-                {feedback && <p role="status">{feedback}</p>}
-                {activePublication && (
-                  <p className="text-success" role="status">
-                    Brouillon de test récupéré.
-                  </p>
-                )}
-                {activePublication && (
-                  <p className="muted-copy">
-                    Dernière mise à jour :{' '}
-                    {new Date(activePublication.updatedAt).toLocaleString('fr-FR')}
-                  </p>
-                )}
                 <div className="form-grid">
                   <label>
                     Titre
@@ -526,46 +366,31 @@ export function BloggerIntegrationPage(): React.JSX.Element {
                     />
                   </label>
                   <div className="button-row span-two">
-                    {!activePublication &&
-                      canCreateDraft &&
-                      (currentPublication.isSuccess || currentPublicationReconciledMissing) && (
-                        <button
-                          className="primary-button"
-                          disabled={createDraft.isPending}
-                          onClick={() => createDraft.mutate()}
-                        >
-                          Créer le brouillon
-                        </button>
-                      )}
-                    {activePublication && (
+                    <button className="primary-button" onClick={() => createDraft.mutate()}>
+                      Créer le brouillon
+                    </button>
+                    {lastPost && (
                       <>
-                        {canUpdateDraft && (
-                          <button
-                            className="secondary-button"
-                            disabled={updateDraft.isPending}
-                            onClick={() => updateDraft.mutate()}
-                          >
-                            Mettre à jour
-                          </button>
-                        )}
-                        {status.data?.publicPublishEnabled && canPublishDraft && (
-                          <button
-                            className="secondary-button"
-                            disabled={publish.isPending}
-                            onClick={() => publish.mutate()}
-                          >
-                            Publier
-                          </button>
-                        )}
-                        {status.data?.deleteEnabled && canDeleteDraft && (
-                          <button
-                            className="danger-button"
-                            disabled={remove.isPending}
-                            onClick={() => remove.mutate()}
-                          >
-                            Supprimer le test
-                          </button>
-                        )}
+                        <button
+                          className="secondary-button"
+                          onClick={() => updateDraft.mutate(lastPost.externalPostId)}
+                        >
+                          Mettre à jour
+                        </button>
+                        <button
+                          className="secondary-button"
+                          disabled={!status.data?.publicPublishEnabled}
+                          onClick={() => publish.mutate(lastPost.externalPostId)}
+                        >
+                          Publier
+                        </button>
+                        <button
+                          className="danger-button"
+                          disabled={!status.data?.deleteEnabled}
+                          onClick={() => remove.mutate(lastPost.externalPostId)}
+                        >
+                          Supprimer le test
+                        </button>
                       </>
                     )}
                   </div>

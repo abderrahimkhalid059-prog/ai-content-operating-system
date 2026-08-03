@@ -9,6 +9,7 @@ import {
 import type { ApiErrorDetail, ApiErrorResponse } from '@ai-content-os/contracts';
 import { ERROR_CODES } from '@ai-content-os/shared';
 import type { Request, Response } from 'express';
+import { sanitizeRequestTarget } from '../logging/request-log.serializer';
 import type { RequestWithId } from '../middleware/request-id.middleware';
 
 const codeByStatus: Record<number, string> = {
@@ -42,7 +43,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         requestId: request.requestId ?? 'unknown',
       },
       timestamp: new Date().toISOString(),
-      path: (request as Request).originalUrl,
+      path: sanitizeRequestTarget((request as Request).originalUrl),
     };
     if (status >= 500) {
       this.logger.error(

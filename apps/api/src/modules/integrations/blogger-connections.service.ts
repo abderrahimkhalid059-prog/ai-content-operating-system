@@ -239,7 +239,7 @@ export class BloggerConnectionsService {
     try {
       const result = await this.providers
         .forMode(this.mode(connection.mode))
-        .listSites(this.context(connection), {
+        .listSites(this.context(connection, request?.requestId), {
           ...(pageSize ? { pageSize } : {}),
           ...(pageToken ? { pageToken } : {}),
         });
@@ -257,6 +257,7 @@ export class BloggerConnectionsService {
       );
       return result;
     } catch (error) {
+      await this.markError(connection.id, error);
       throw this.providerError(error);
     }
   }
@@ -465,10 +466,22 @@ export class BloggerConnectionsService {
     return connection;
   }
 
-  context(connection: ConnectionRecord): ProviderConnectionContext {
+  async selectedConnectionOrNull(
+    workspaceId: string,
+    websiteId: string,
+  ): Promise<ConnectionRecord | null> {
+    await this.requireWebsite(workspaceId, websiteId);
+    const connection = await this.activeConnection(workspaceId, websiteId);
+    return connection?.externalSiteId ? connection : null;
+  }
+
+  context(connection: ConnectionRecord, correlationId?: string): ProviderConnectionContext {
     return {
       connectionId: connection.id,
       mode: this.mode(connection.mode),
+      workspaceId: connection.workspaceId,
+      websiteId: connection.websiteId,
+      ...(correlationId ? { correlationId } : {}),
       ...(connection.externalAccountId ? { externalAccountId: connection.externalAccountId } : {}),
       ...(connection.externalSiteId ? { externalSiteId: connection.externalSiteId } : {}),
       ...(connection.encryptedCredentials && connection.credentialKeyVersion
@@ -480,6 +493,10 @@ export class BloggerConnectionsService {
           }
         : {}),
     };
+  }
+
+  recordProviderError(connectionId: string, error: unknown): Promise<void> {
+    return this.markError(connectionId, error);
   }
 
   present(connection: ConnectionRecord): IntegrationSummary {
@@ -594,13 +611,18 @@ export class BloggerConnectionsService {
 
   private async markError(connectionId: string, error: unknown): Promise<void> {
     const code = error instanceof ProviderError ? error.code : ERROR_CODES.internal;
+    const reauthorizationRequired =
+      code === ERROR_CODES.integrationConnectionExpired ||
+      code === ERROR_CODES.bloggerAccountUnauthorized ||
+      (code === ERROR_CODES.bloggerTokenRefreshFailed &&
+        error instanceof ProviderError &&
+        !error.retryable);
     await this.database.websiteConnection.update({
       where: { id: connectionId },
       data: {
-        status:
-          code === ERROR_CODES.integrationConnectionExpired
-            ? WebsiteConnectionStatus.EXPIRED
-            : WebsiteConnectionStatus.DEGRADED,
+        status: reauthorizationRequired
+          ? WebsiteConnectionStatus.EXPIRED
+          : WebsiteConnectionStatus.DEGRADED,
         lastErrorCode: code,
         lastErrorAt: new Date(),
       },

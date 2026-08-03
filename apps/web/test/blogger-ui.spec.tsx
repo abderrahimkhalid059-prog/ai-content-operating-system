@@ -1,12 +1,26 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route } from 'react-router-dom';
+import type { CurrentBloggerTestPublication } from '@ai-content-os/contracts';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BloggerIntegrationPage } from '../src/pages/integrations/blogger';
 import { ApiClientError } from '../src/api/client';
 import type * as ApiClientModule from '../src/api/client';
 
-const mocks = vi.hoisted(() => ({ apiRequest: vi.fn(), can: vi.fn(() => true) }));
+const mocks = vi.hoisted(() => ({
+  apiRequest: vi.fn(),
+  can: vi.fn<(permission: string, workspaceId?: string) => boolean>(() => true),
+}));
+type TestCurrentPublication = Omit<CurrentBloggerTestPublication, 'status'> & {
+  status: CurrentBloggerTestPublication['status'] | 'draft';
+};
+
+let currentTestPublication: TestCurrentPublication | null;
+let systemStatus: {
+  bloggerMode: 'MOCK' | 'LIVE';
+  publicPublishEnabled: boolean;
+  deleteEnabled: boolean;
+};
 vi.mock('../src/auth/auth-context', () => ({
   useAuth: () => ({ can: mocks.can }),
 }));
@@ -32,15 +46,39 @@ describe('Administration Blogger', () => {
     window.history.replaceState({}, '', '/');
     mocks.apiRequest.mockReset();
     mocks.can.mockReturnValue(true);
+    currentTestPublication = null;
+    systemStatus = {
+      bloggerMode: 'MOCK',
+      publicPublishEnabled: false,
+      deleteEnabled: false,
+    };
     mocks.apiRequest.mockImplementation((path: string, init?: RequestInit) => {
       if (path === '/integrations/status') {
-        return Promise.resolve({
-          bloggerMode: 'MOCK',
-          publicPublishEnabled: false,
-          deleteEnabled: false,
-        });
+        return Promise.resolve(systemStatus);
+      }
+      if (
+        path.endsWith('/integrations/blogger/test-publication/current') &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return Promise.resolve(currentTestPublication);
       }
       if (path.endsWith('/integrations/blogger/test-posts') && init?.method === 'POST') {
+        expect(init.body).toEqual(expect.any(String));
+        const body = JSON.parse(init.body as string) as {
+          title: string;
+          htmlContent: string;
+          labels: string[];
+        };
+        currentTestPublication = {
+          publicationId: 'op1',
+          externalPostId: 'external-draft',
+          title: body.title,
+          htmlContent: body.htmlContent,
+          labels: body.labels,
+          status: 'DRAFT',
+          createdAt: '2026-07-29T00:00:00.000Z',
+          updatedAt: '2026-07-29T00:00:00.000Z',
+        };
         return Promise.resolve({
           operationId: 'op1',
           idempotencyKey: 'key',
@@ -111,9 +149,239 @@ describe('Administration Blogger', () => {
     expect(await screen.findByText('Billet arabe importé')).toBeInTheDocument();
     expect(await screen.findByText('Sport · 2')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Créer le brouillon' }));
-    expect(await screen.findByRole('button', { name: 'Publier' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Supprimer le test' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Mettre à jour' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le brouillon' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Supprimer le test' })).not.toBeInTheDocument();
+    expect(screen.getByText('Brouillon créé avec succès.')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/accessToken|refreshToken|encryptedCredentials/);
+  });
+
+  it('rehydrates the active draft after a fresh page render without creating another draft', async () => {
+    currentTestPublication = {
+      publicationId: 'publication-persisted',
+      externalPostId: 'provider-draft-persisted',
+      title: 'Titre Blogger mis à jour',
+      htmlContent: '<p>HTML Blogger mis à jour</p>',
+      labels: ['persisté', 'validation'],
+      status: 'DRAFT',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+    };
+
+    renderPage();
+
+    expect(await screen.findByDisplayValue('Titre Blogger mis à jour')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('<p>HTML Blogger mis à jour</p>')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('persisté, validation')).toBeInTheDocument();
+    expect(screen.getByText('Brouillon de test récupéré.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mettre à jour' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le brouillon' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Supprimer le test' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
+    expect(
+      mocks.apiRequest.mock.calls.filter(
+        ([path, init]) =>
+          String(path).endsWith('/integrations/blogger/test-posts') &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('treats a lowercase recovered draft as active and shows delete only when enabled', async () => {
+    systemStatus.deleteEnabled = true;
+    currentTestPublication = {
+      publicationId: 'publication-lowercase',
+      externalPostId: 'provider-draft-lowercase',
+      title: 'Brouillon lowercase récupéré',
+      htmlContent: '<p>Contenu lowercase</p>',
+      labels: ['lowercase'],
+      status: 'draft',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+    };
+
+    renderPage();
+
+    expect(await screen.findByDisplayValue('Brouillon lowercase récupéré')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mettre à jour' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Supprimer le test' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publier' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le brouillon' })).not.toBeInTheDocument();
+    expect(
+      mocks.apiRequest.mock.calls.filter(
+        ([path, init]) =>
+          String(path).endsWith('/integrations/blogger/test-posts') &&
+          (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/accessToken|refreshToken|encryptedCredentials/);
+  });
+
+  it('shows publish only when the server flag and user permission explicitly allow it', async () => {
+    systemStatus.publicPublishEnabled = true;
+    currentTestPublication = {
+      publicationId: 'publication-publishable',
+      externalPostId: 'provider-draft-publishable',
+      title: 'Brouillon publiable récupéré',
+      htmlContent: '<p>Contenu publiable</p>',
+      labels: ['publication'],
+      status: 'DRAFT',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+    };
+
+    renderPage();
+
+    expect(await screen.findByDisplayValue('Brouillon publiable récupéré')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mettre à jour' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publier' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Supprimer le test' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le brouillon' })).not.toBeInTheDocument();
+  });
+
+  it('keeps update visible but hides delete when the user lacks delete permission', async () => {
+    systemStatus.deleteEnabled = true;
+    mocks.can.mockImplementation(
+      (permission: string) => permission !== 'providerPublishing.delete',
+    );
+    currentTestPublication = {
+      publicationId: 'publication-permission',
+      externalPostId: 'provider-draft-permission',
+      title: 'Brouillon avec permission limitée',
+      htmlContent: '<p>Contenu protégé</p>',
+      labels: ['permission'],
+      status: 'DRAFT',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+    };
+
+    renderPage();
+
+    expect(
+      await screen.findByDisplayValue('Brouillon avec permission limitée'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mettre à jour' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Supprimer le test' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Créer le brouillon' })).not.toBeInTheDocument();
+  });
+
+  it('updates and deletes only through the server-resolved current publication', async () => {
+    currentTestPublication = {
+      publicationId: 'publication-current',
+      externalPostId: 'provider-draft-current',
+      title: 'Brouillon récupéré',
+      htmlContent: '<p>Contenu récupéré</p>',
+      labels: ['récupéré'],
+      status: 'DRAFT',
+      createdAt: '2026-07-29T00:00:00.000Z',
+      updatedAt: '2026-07-29T01:00:00.000Z',
+    };
+    const fallback = mocks.apiRequest.getMockImplementation() as (
+      path: string,
+      init?: RequestInit,
+    ) => Promise<unknown>;
+    mocks.apiRequest.mockImplementation((path: string, init?: RequestInit) => {
+      if (path === '/integrations/status') {
+        return Promise.resolve({
+          bloggerMode: 'MOCK',
+          publicPublishEnabled: false,
+          deleteEnabled: true,
+        });
+      }
+      if (
+        path.endsWith('/integrations/blogger/test-publication/current') &&
+        init?.method === 'PATCH'
+      ) {
+        expect(init.body).toEqual(expect.any(String));
+        const body = JSON.parse(init.body as string) as {
+          title: string;
+          htmlContent: string;
+          labels: string[];
+        };
+        currentTestPublication = {
+          ...currentTestPublication!,
+          title: body.title,
+          htmlContent: body.htmlContent,
+          labels: body.labels,
+          updatedAt: '2026-07-29T02:00:00.000Z',
+        };
+        return Promise.resolve({
+          operationId: 'update-operation',
+          idempotencyKey: 'update-key',
+          status: 'COMPLETED',
+        });
+      }
+      if (
+        path.endsWith('/integrations/blogger/test-publication/current') &&
+        init?.method === 'DELETE'
+      ) {
+        currentTestPublication = null;
+        return Promise.resolve(undefined);
+      }
+      return fallback(path, init);
+    });
+
+    renderPage();
+    const titleInput = await screen.findByDisplayValue('Brouillon récupéré');
+    fireEvent.change(titleInput, { target: { value: 'Brouillon récupéré et modifié' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour' }));
+
+    expect(await screen.findByText('Brouillon mis à jour avec succès.')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('Brouillon récupéré et modifié')).toBeInTheDocument();
+    const updateCall = mocks.apiRequest.mock.calls.find(
+      ([path, init]) =>
+        String(path).endsWith('/integrations/blogger/test-publication/current') &&
+        (init as RequestInit | undefined)?.method === 'PATCH',
+    );
+    expect(String(updateCall?.[0])).not.toContain('provider-draft-current');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Supprimer le test' }));
+    expect(await screen.findByText('Brouillon de test supprimé avec succès.')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Créer le brouillon' })).toBeInTheDocument();
+    const deleteCall = mocks.apiRequest.mock.calls.find(
+      ([path, init]) =>
+        String(path).endsWith('/integrations/blogger/test-publication/current') &&
+        (init as RequestInit | undefined)?.method === 'DELETE',
+    );
+    expect(String(deleteCall?.[0])).not.toContain('provider-draft-current');
+  });
+
+  it('offers a clean create path after the API reconciles a provider-side deletion', async () => {
+    const safeMessage =
+      'Le brouillon de test n’existe plus dans Blogger. Son état local a été réconcilié.';
+    const fallback = mocks.apiRequest.getMockImplementation() as (
+      path: string,
+      init?: RequestInit,
+    ) => Promise<unknown>;
+    mocks.apiRequest.mockImplementation((path: string, init?: RequestInit) => {
+      if (
+        path.endsWith('/integrations/blogger/test-publication/current') &&
+        (init?.method ?? 'GET') === 'GET'
+      ) {
+        return Promise.reject(
+          new ApiClientError(safeMessage, 410, {
+            success: false,
+            error: {
+              code: 'BLOGGER_POST_NOT_FOUND',
+              message: safeMessage,
+              details: [],
+              requestId: 'safe-request-id',
+            },
+            timestamp: '2026-07-29T00:00:00.000Z',
+            path: '/safe-path',
+          }),
+        );
+      }
+      return fallback(path, init);
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(safeMessage);
+    expect(screen.getByRole('button', { name: 'Créer le brouillon' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mettre à jour' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/token|secret|credential/i);
   });
 
   it('renders the Live mode warning state without exposing credentials', async () => {
@@ -124,6 +392,9 @@ describe('Administration Blogger', () => {
           publicPublishEnabled: false,
           deleteEnabled: false,
         });
+      }
+      if (path.endsWith('/integrations/blogger/test-publication/current')) {
+        return Promise.resolve(null);
       }
       if (path.endsWith('/integrations/blogger')) {
         return Promise.resolve({

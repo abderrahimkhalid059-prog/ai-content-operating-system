@@ -72,12 +72,18 @@ export interface LiveBloggerConfig {
 export interface BloggerProviderDiagnostic {
   operation: string;
   googleHttpStatus: number;
-  connectionId: string;
+  connectionId?: string;
   workspaceId?: string;
   websiteId?: string;
   requestId?: string;
+  correlationId?: string;
   googleReason?: string;
   returnedBlogs?: number;
+  activeBlogIdPresent?: boolean;
+  externalPostIdPresent?: boolean;
+  requestedView?: 'ADMIN';
+  fallbackDraftResultCount?: number;
+  targetExternalPostIdFound?: boolean;
 }
 
 export type BloggerProviderDiagnosticSink = (diagnostic: BloggerProviderDiagnostic) => void;
@@ -118,6 +124,11 @@ interface GooglePost {
   labels?: string[];
   published?: string;
   updated?: string;
+}
+
+interface GooglePostList {
+  items?: GooglePost[];
+  nextPageToken?: string;
 }
 
 export class LiveBloggerProvider implements PublishingProvider {
@@ -348,15 +359,35 @@ export class LiveBloggerProvider implements PublishingProvider {
     externalSiteId: string,
     externalPostId: string,
   ): Promise<ProviderPost> {
-    const result = await this.request<GooglePost>(
-      connection,
-      new URL(
-        `${this.config.apiBaseUrl}/blogs/${encodeURIComponent(externalSiteId)}/posts/${encodeURIComponent(externalPostId)}`,
-      ),
-      undefined,
-      'post',
+    const postUrl = new URL(
+      `${this.apiBaseUrl()}/blogs/${encodeURIComponent(externalSiteId)}/posts/${encodeURIComponent(externalPostId)}`,
     );
-    return this.post(result);
+    postUrl.searchParams.set('view', 'ADMIN');
+    const result = await this.response<unknown>(connection, postUrl);
+    this.postDiagnostic(
+      connection,
+      'blogger.posts.get',
+      result.status,
+      externalSiteId,
+      externalPostId,
+      {
+        requestedView: 'ADMIN',
+      },
+    );
+
+    if (result.status >= 200 && result.status < 300) {
+      const post = this.validatedPost(result.body, externalSiteId, externalPostId);
+      return this.post(post);
+    }
+    if (result.status !== 404) {
+      this.assertSuccess(result.status, 'post', result.body);
+    }
+
+    const fallback = await this.findDraftInAdminList(connection, externalSiteId, externalPostId);
+    if (fallback) return this.post(fallback);
+
+    this.assertSuccess(result.status, 'post', result.body);
+    throw this.malformedResponse();
   }
 
   async createDraft(
@@ -467,6 +498,99 @@ export class LiveBloggerProvider implements PublishingProvider {
     });
   }
 
+  private async findDraftInAdminList(
+    connection: ProviderConnectionContext,
+    externalSiteId: string,
+    externalPostId: string,
+  ): Promise<GooglePost | null> {
+    let pageToken: string | undefined;
+    let fallbackDraftResultCount = 0;
+    let fallbackGoogleHttpStatus = 0;
+    const seenPageTokens = new Set<string>();
+
+    do {
+      const url = new URL(`${this.apiBaseUrl()}/blogs/${encodeURIComponent(externalSiteId)}/posts`);
+      url.searchParams.set('status', 'draft');
+      url.searchParams.set('view', 'ADMIN');
+      url.searchParams.set('fetchBodies', 'true');
+      url.searchParams.set('maxResults', '500');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+      const response = await this.response<unknown>(connection, url);
+      fallbackGoogleHttpStatus = response.status;
+      if (response.status < 200 || response.status >= 300) {
+        this.postDiagnostic(
+          connection,
+          'blogger.posts.listDraftsForRecovery',
+          response.status,
+          externalSiteId,
+          externalPostId,
+          {
+            requestedView: 'ADMIN',
+            fallbackDraftResultCount,
+            targetExternalPostIdFound: false,
+          },
+        );
+        this.assertSuccess(response.status, 'site', response.body);
+      }
+      if (!this.isGooglePostList(response.body)) {
+        this.postDiagnostic(
+          connection,
+          'blogger.posts.listDraftsForRecovery',
+          response.status,
+          externalSiteId,
+          externalPostId,
+          {
+            requestedView: 'ADMIN',
+            fallbackDraftResultCount,
+            targetExternalPostIdFound: false,
+          },
+        );
+        throw this.malformedResponse();
+      }
+
+      const items = response.body.items ?? [];
+      fallbackDraftResultCount += items.length;
+      const found = items.find(({ id }) => id === externalPostId);
+      if (found) {
+        const post = this.validatedPost(found, externalSiteId, externalPostId);
+        this.postDiagnostic(
+          connection,
+          'blogger.posts.listDraftsForRecovery',
+          response.status,
+          externalSiteId,
+          externalPostId,
+          {
+            requestedView: 'ADMIN',
+            fallbackDraftResultCount,
+            targetExternalPostIdFound: true,
+          },
+        );
+        return post;
+      }
+
+      pageToken = response.body.nextPageToken;
+      if (pageToken) {
+        if (seenPageTokens.has(pageToken)) throw this.malformedResponse();
+        seenPageTokens.add(pageToken);
+      }
+    } while (pageToken);
+
+    this.postDiagnostic(
+      connection,
+      'blogger.posts.listDraftsForRecovery',
+      fallbackGoogleHttpStatus,
+      externalSiteId,
+      externalPostId,
+      {
+        requestedView: 'ADMIN',
+        fallbackDraftResultCount,
+        targetExternalPostIdFound: false,
+      },
+    );
+    return null;
+  }
+
   private assertSuccess(status: number, resource?: string, body?: unknown): void {
     if (status >= 200 && status < 300) return;
     const reason = this.googleReason(body);
@@ -556,6 +680,39 @@ export class LiveBloggerProvider implements PublishingProvider {
     );
   }
 
+  private isGooglePostList(body: unknown): body is GooglePostList {
+    return (
+      this.isRecord(body) &&
+      (body.items === undefined ||
+        (Array.isArray(body.items) && body.items.every((item) => this.isGooglePost(item)))) &&
+      (body.nextPageToken === undefined || typeof body.nextPageToken === 'string')
+    );
+  }
+
+  private isGooglePost(body: unknown): body is GooglePost {
+    return (
+      this.isRecord(body) &&
+      typeof body.id === 'string' &&
+      this.isRecord(body.blog) &&
+      typeof body.blog.id === 'string' &&
+      typeof body.title === 'string' &&
+      (body.content === undefined || typeof body.content === 'string') &&
+      (body.status === undefined || typeof body.status === 'string') &&
+      (body.labels === undefined ||
+        (Array.isArray(body.labels) && body.labels.every((label) => typeof label === 'string'))) &&
+      (body.url === undefined || typeof body.url === 'string') &&
+      (body.published === undefined || typeof body.published === 'string') &&
+      (body.updated === undefined || typeof body.updated === 'string')
+    );
+  }
+
+  private validatedPost(body: unknown, externalSiteId: string, externalPostId: string): GooglePost {
+    if (!this.isGooglePost(body) || body.blog.id !== externalSiteId || body.id !== externalPostId) {
+      throw this.malformedResponse();
+    }
+    return body;
+  }
+
   private googleReason(body: unknown): string | undefined {
     if (!this.isRecord(body) || !this.isRecord(body.error)) return undefined;
     const error = body.error;
@@ -588,6 +745,34 @@ export class LiveBloggerProvider implements PublishingProvider {
       ...(connection.correlationId ? { requestId: connection.correlationId } : {}),
       ...(details.reason ? { googleReason: details.reason } : {}),
       ...(details.returnedBlogs !== undefined ? { returnedBlogs: details.returnedBlogs } : {}),
+    });
+  }
+
+  private postDiagnostic(
+    connection: ProviderConnectionContext,
+    operation: string,
+    googleHttpStatus: number,
+    externalSiteId: string,
+    externalPostId: string,
+    details: {
+      requestedView: 'ADMIN';
+      fallbackDraftResultCount?: number;
+      targetExternalPostIdFound?: boolean;
+    },
+  ): void {
+    this.diagnostics({
+      operation,
+      googleHttpStatus,
+      activeBlogIdPresent: externalSiteId.length > 0,
+      externalPostIdPresent: externalPostId.length > 0,
+      requestedView: details.requestedView,
+      ...(details.fallbackDraftResultCount !== undefined
+        ? { fallbackDraftResultCount: details.fallbackDraftResultCount }
+        : {}),
+      ...(details.targetExternalPostIdFound !== undefined
+        ? { targetExternalPostIdFound: details.targetExternalPostIdFound }
+        : {}),
+      ...(connection.correlationId ? { correlationId: connection.correlationId } : {}),
     });
   }
 
@@ -629,14 +814,14 @@ export class LiveBloggerProvider implements PublishingProvider {
   }
 
   private post(post: GooglePost): ProviderPost {
+    const status = post.status?.toLowerCase();
     return {
       id: post.id,
       siteId: post.blog.id,
       title: post.title,
       htmlContent: post.content ?? '',
       ...(post.url ? { url: post.url } : {}),
-      status:
-        post.status === 'draft' ? 'DRAFT' : post.status === 'scheduled' ? 'SCHEDULED' : 'PUBLISHED',
+      status: status === 'draft' ? 'DRAFT' : status === 'scheduled' ? 'SCHEDULED' : 'PUBLISHED',
       labels: post.labels ?? [],
       ...(post.published ? { publishedAt: new Date(post.published).toISOString() } : {}),
       updatedAt: new Date(post.updated ?? Date.now()).toISOString(),

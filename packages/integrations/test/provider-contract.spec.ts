@@ -309,6 +309,170 @@ const realGoogleBlogList = {
   ],
 };
 
+describe('Live Blogger post status mapping', () => {
+  it('uses the ADMIN view, preserves string IDs, and maps uppercase DRAFT', async () => {
+    const blogId = '123456789012345678901234567890';
+    const postId = '987654321098765432109876543210';
+    const transport = new SequenceTransport([
+      {
+        status: 200,
+        body: {
+          id: postId,
+          blog: { id: blogId },
+          title: 'Recovered draft',
+          content: '<p>Recovered HTML</p>',
+          status: 'DRAFT',
+          labels: ['recovery'],
+          updated: '2026-07-29T17:58:39.000Z',
+        },
+      },
+    ]);
+    const provider = new LiveBloggerProvider(liveConfig, transport);
+
+    await expect(provider.getPost(liveConnection, blogId, postId)).resolves.toMatchObject({
+      id: postId,
+      siteId: blogId,
+      title: 'Recovered draft',
+      htmlContent: '<p>Recovered HTML</p>',
+      labels: ['recovery'],
+      status: 'DRAFT',
+      updatedAt: '2026-07-29T17:58:39.000Z',
+    });
+    const requestUrl = new URL(transport.requests[0]!.url);
+    expect(requestUrl.pathname).toBe(`/v3/blogs/${blogId}/posts/${postId}`);
+    expect(requestUrl.searchParams.get('view')).toBe('ADMIN');
+    expect(transport.requests[0]!.method ?? 'GET').toBe('GET');
+    expect(typeof blogId).toBe('string');
+    expect(typeof postId).toBe('string');
+  });
+
+  it('recovers a draft from the authenticated ADMIN list after a false individual 404', async () => {
+    const diagnostics: unknown[] = [];
+    const transport = new SequenceTransport([
+      { status: 404, body: { error: { status: 'NOT_FOUND' } } },
+      {
+        status: 200,
+        body: {
+          items: [
+            {
+              id: 'real-google-draft-id',
+              blog: { id: '123456789' },
+              title: 'Recovered from draft list',
+              content: '<p>Still present</p>',
+              status: 'draft',
+              labels: ['recovery'],
+              updated: '2026-07-29T17:58:39.000Z',
+            },
+          ],
+        },
+      },
+    ]);
+    const provider = new LiveBloggerProvider(liveConfig, transport, (value) =>
+      diagnostics.push(value),
+    );
+
+    await expect(
+      provider.getPost(liveConnection, '123456789', 'real-google-draft-id'),
+    ).resolves.toMatchObject({
+      id: 'real-google-draft-id',
+      siteId: '123456789',
+      status: 'DRAFT',
+    });
+    expect(transport.requests).toHaveLength(2);
+    const individualUrl = new URL(transport.requests[0]!.url);
+    const fallbackUrl = new URL(transport.requests[1]!.url);
+    expect(individualUrl.searchParams.get('view')).toBe('ADMIN');
+    expect(fallbackUrl.pathname).toBe('/v3/blogs/123456789/posts');
+    expect(fallbackUrl.searchParams.get('status')).toBe('draft');
+    expect(fallbackUrl.searchParams.get('view')).toBe('ADMIN');
+    expect(fallbackUrl.searchParams.get('fetchBodies')).toBe('true');
+    expect(transport.requests.every(({ method }) => (method ?? 'GET') === 'GET')).toBe(true);
+    expect(diagnostics.at(-1)).toEqual({
+      operation: 'blogger.posts.listDraftsForRecovery',
+      googleHttpStatus: 200,
+      activeBlogIdPresent: true,
+      externalPostIdPresent: true,
+      requestedView: 'ADMIN',
+      fallbackDraftResultCount: 1,
+      targetExternalPostIdFound: true,
+      correlationId: 'request-safe-id',
+    });
+    expect(JSON.stringify(diagnostics)).not.toMatch(
+      /123456789|real-google-draft-id|access-token-must-not-leak|refresh-token-must-not-leak|authorization|content/i,
+    );
+  });
+
+  it('confirms absence in the ADMIN draft list before returning post not found', async () => {
+    const transport = new SequenceTransport([
+      { status: 404, body: { error: { status: 'NOT_FOUND' } } },
+      { status: 200, body: { items: [] } },
+    ]);
+    const provider = new LiveBloggerProvider(liveConfig, transport);
+
+    await expect(
+      provider.getPost(liveConnection, '123456789', 'missing-draft-id'),
+    ).rejects.toMatchObject({ code: 'BLOGGER_POST_NOT_FOUND', status: 404 });
+    expect(transport.requests).toHaveLength(2);
+  });
+
+  it.each([
+    [401, 'BLOGGER_ACCOUNT_UNAUTHORIZED'],
+    [403, 'BLOGGER_PERMISSION_DENIED'],
+    [429, 'BLOGGER_RATE_LIMITED'],
+    [500, 'BLOGGER_UPSTREAM_UNAVAILABLE'],
+  ])('does not turn an individual HTTP %s into post-not-found', async (status, code) => {
+    const transport = new SequenceTransport([{ status, body: { error: { status: code } } }]);
+    const provider = new LiveBloggerProvider(liveConfig, transport);
+
+    await expect(
+      provider.getPost(liveConnection, '123456789', 'real-google-draft-id'),
+    ).rejects.toMatchObject({ code, status });
+    expect(transport.requests).toHaveLength(1);
+  });
+
+  it.each([
+    [401, 'BLOGGER_ACCOUNT_UNAUTHORIZED'],
+    [403, 'BLOGGER_PERMISSION_DENIED'],
+    [429, 'BLOGGER_RATE_LIMITED'],
+    [503, 'BLOGGER_UPSTREAM_UNAVAILABLE'],
+  ])('does not turn fallback HTTP %s into post-not-found', async (status, code) => {
+    const transport = new SequenceTransport([
+      { status: 404, body: { error: { status: 'NOT_FOUND' } } },
+      { status, body: { error: { status: code } } },
+    ]);
+    const provider = new LiveBloggerProvider(liveConfig, transport);
+
+    await expect(
+      provider.getPost(liveConnection, '123456789', 'real-google-draft-id'),
+    ).rejects.toMatchObject({ code, status });
+  });
+
+  it('rejects a post returned for the wrong external site', async () => {
+    const provider = new LiveBloggerProvider(
+      liveConfig,
+      new SequenceTransport([
+        {
+          status: 200,
+          body: {
+            id: 'real-google-draft-id',
+            blog: { id: 'wrong-blog-id' },
+            title: 'Wrong site',
+            status: 'draft',
+          },
+        },
+      ]),
+    );
+
+    await expect(
+      provider.getPost(liveConnection, '123456789', 'real-google-draft-id'),
+    ).rejects.toMatchObject({
+      code: 'BLOGGER_UPSTREAM_UNAVAILABLE',
+      status: 502,
+      reason: 'malformed_response',
+    });
+  });
+});
+
 describe('Live Blogger blog discovery', () => {
   it('verifies identity, calls the exact official endpoint, ignores pagination, and maps items', async () => {
     const transport = new SequenceTransport([

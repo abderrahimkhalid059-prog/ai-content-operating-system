@@ -452,6 +452,17 @@ export interface PublicationOperationResult {
   post?: ExternalPostSummary;
 }
 
+export interface CurrentBloggerTestPublication {
+  publicationId: string;
+  externalPostId: string;
+  title: string;
+  htmlContent: string;
+  labels: string[];
+  status: ProviderPostStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BloggerSyncJobData {
   syncRunId: string;
   workspaceId: string;

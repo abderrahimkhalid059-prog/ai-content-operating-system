@@ -466,6 +466,15 @@ export class BloggerConnectionsService {
     return connection;
   }
 
+  async selectedConnectionOrNull(
+    workspaceId: string,
+    websiteId: string,
+  ): Promise<ConnectionRecord | null> {
+    await this.requireWebsite(workspaceId, websiteId);
+    const connection = await this.activeConnection(workspaceId, websiteId);
+    return connection?.externalSiteId ? connection : null;
+  }
+
   context(connection: ConnectionRecord, correlationId?: string): ProviderConnectionContext {
     return {
       connectionId: connection.id,
@@ -484,6 +493,10 @@ export class BloggerConnectionsService {
           }
         : {}),
     };
+  }
+
+  recordProviderError(connectionId: string, error: unknown): Promise<void> {
+    return this.markError(connectionId, error);
   }
 
   present(connection: ConnectionRecord): IntegrationSummary {

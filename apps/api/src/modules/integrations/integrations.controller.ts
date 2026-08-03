@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -18,7 +17,6 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type {
-  CurrentBloggerTestPublication,
   ExternalLabelSummary,
   ExternalPostSummary,
   IntegrationSummary,
@@ -59,7 +57,6 @@ export class PublicIntegrationsController {
 
   @Public()
   @Get('status')
-  @Header('Cache-Control', 'no-store, private')
   @ApiOperation({ summary: 'Expose only safe integration feature flags' })
   status() {
     return this.connections.systemStatus();
@@ -101,7 +98,6 @@ export class BloggerIntegrationsController {
   }
 
   @Get('integrations/blogger')
-  @Header('Cache-Control', 'no-store, private')
   @RequirePermissions('integrations.read')
   integration(
     @CurrentWorkspace() workspace: WorkspaceContext,
@@ -123,7 +119,6 @@ export class BloggerIntegrationsController {
   }
 
   @Get('integrations/blogger/sites')
-  @Header('Cache-Control', 'no-store, private')
   @RequirePermissions('integrations.read')
   sites(
     @CurrentUser() actor: AuthContext,
@@ -248,76 +243,6 @@ export class BloggerIntegrationsController {
     @Req() request: AuthenticatedRequest,
   ): Promise<PublicationOperationResult> {
     return this.publication.createDraft(actor, workspace, websiteId, input, request);
-  }
-
-  @Get('integrations/blogger/test-publication/current')
-  @Header('Cache-Control', 'no-store, private')
-  @RequirePermissions('integrations.read')
-  async currentTestPublication(
-    @CurrentUser() actor: AuthContext,
-    @CurrentWorkspace() workspace: WorkspaceContext,
-    @Param('websiteId', ParseUUIDPipe) websiteId: string,
-    @Req() request: AuthenticatedRequest,
-    @Res() response: Response,
-  ): Promise<void> {
-    const current: CurrentBloggerTestPublication | null = await this.publication.current(
-      actor,
-      workspace,
-      websiteId,
-      request,
-    );
-    response.status(HttpStatus.OK).json(current);
-  }
-
-  @Patch('integrations/blogger/test-publication/current')
-  @RequirePermissions('providerPublishing.update')
-  updateCurrentTestPublication(
-    @CurrentUser() actor: AuthContext,
-    @CurrentWorkspace() workspace: WorkspaceContext,
-    @Param('websiteId', ParseUUIDPipe) websiteId: string,
-    @Body() input: UpdateTestDraftDto,
-    @Req() request: AuthenticatedRequest,
-  ): Promise<PublicationOperationResult> {
-    return this.publication.update(actor, workspace, websiteId, undefined, input, request);
-  }
-
-  @Post('integrations/blogger/test-publication/current/publish')
-  @RequirePermissions('providerPublishing.publish')
-  publishCurrentTestPublication(
-    @CurrentUser() actor: AuthContext,
-    @CurrentWorkspace() workspace: WorkspaceContext,
-    @Param('websiteId', ParseUUIDPipe) websiteId: string,
-    @Body() input: PublicationActionDto,
-    @Req() request: AuthenticatedRequest,
-  ): Promise<PublicationOperationResult> {
-    return this.publication.publish(
-      actor,
-      workspace,
-      websiteId,
-      undefined,
-      input.idempotencyKey,
-      request,
-    );
-  }
-
-  @Delete('integrations/blogger/test-publication/current')
-  @RequirePermissions('providerPublishing.delete')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  deleteCurrentTestPublication(
-    @CurrentUser() actor: AuthContext,
-    @CurrentWorkspace() workspace: WorkspaceContext,
-    @Param('websiteId', ParseUUIDPipe) websiteId: string,
-    @Body() input: PublicationActionDto,
-    @Req() request: AuthenticatedRequest,
-  ): Promise<void> {
-    return this.publication.delete(
-      actor,
-      workspace,
-      websiteId,
-      undefined,
-      input.idempotencyKey,
-      request,
-    );
   }
 
   @Get('integrations/blogger/test-posts/:externalPostId')

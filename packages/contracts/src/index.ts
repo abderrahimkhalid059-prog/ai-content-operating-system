@@ -275,9 +275,6 @@ export type MockProviderSimulation =
 export interface ProviderConnectionContext {
   connectionId: string;
   mode: ProviderMode;
-  workspaceId?: string;
-  websiteId?: string;
-  correlationId?: string;
   credentials?: ProviderCredential;
   externalAccountId?: string;
   externalSiteId?: string;
@@ -450,17 +447,6 @@ export interface PublicationOperationResult {
   idempotencyKey: string;
   status: 'PENDING' | 'COMPLETED' | 'FAILED';
   post?: ExternalPostSummary;
-}
-
-export interface CurrentBloggerTestPublication {
-  publicationId: string;
-  externalPostId: string;
-  title: string;
-  htmlContent: string;
-  labels: string[];
-  status: ProviderPostStatus;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface BloggerSyncJobData {

@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run test/health.spec.ts test/system.controller.spec.ts test/password.spec.ts test/permissions.spec.ts test/request-log.spec.ts",
+    "test:unit": "vitest run test/health.spec.ts test/system.controller.spec.ts test/password.spec.ts test/permissions.spec.ts",
     "test:integration": "vitest run test/error-format.integration.spec.ts test/phase1.integration.spec.ts test/phase2-blogger.integration.spec.ts"
   },
   "dependencies": {

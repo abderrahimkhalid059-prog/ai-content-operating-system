@@ -6,6 +6,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { validateEnvironment } from '@ai-content-os/config';
 import { AccessTokenGuard } from './common/auth/access-token.guard';
 import { AuditModule } from './common/audit/audit.module';
+import { sanitizeLoggedRequest } from './common/logging/request-log.serializer';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
@@ -57,6 +58,7 @@ import { WebsitesModule } from './modules/websites/websites.module';
           return id;
         },
         customProps: (request) => ({ requestId: request.id }),
+        serializers: { req: sanitizeLoggedRequest },
       },
     }),
     DatabaseModule,

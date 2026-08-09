@@ -154,11 +154,82 @@ const profile = await request(
 );
 assert.equal(profile.isDefault, true);
 
+const contentBase = `${apiUrl}/workspaces/${primaryWorkspace.id}/websites/${website.id}/contents`;
+const content = await request(contentBase, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Validation full-stack Phase 3A',
+    slug: `phase-3a-${validationSuffix}`,
+    excerpt: 'Contenu manuel de validation.',
+    htmlContent: '<h1>Validation</h1><p class="retiree">Contenu éditorial sûr.</p>',
+    language: 'fr',
+    locale: 'fr-FR',
+    labels: ['Validation', ' phase 3a '],
+    editorialStatus: 'DRAFT',
+    contentProfileId: profile.id,
+    changeReason: 'Création full-stack',
+  }),
+});
+assert.equal(content.version, 1);
+assert.equal(content.publicationStatus, 'NOT_PUBLISHED');
+assert.equal(content.htmlContent, '<h1>Validation</h1><p>Contenu éditorial sûr.</p>');
+assert.ok(content.wordCount > 0);
+
+const listedContent = await request(`${contentBase}?search=Phase%203A&pageSize=1`, {
+  headers: authorization,
+});
+assert.equal(listedContent.data[0].id, content.id);
+
+const updatedContent = await request(`${contentBase}/${content.id}`, {
+  method: 'PATCH',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    expectedVersion: content.version,
+    title: 'Validation full-stack Phase 3A — version 2',
+    changeReason: 'Contrôle de version',
+  }),
+});
+assert.equal(updatedContent.version, 2);
+const staleContent = await fetch(`${contentBase}/${content.id}`, {
+  method: 'PATCH',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({ expectedVersion: 1, title: 'Écriture obsolète' }),
+});
+assert.equal(staleContent.status, 409);
+assert.equal((await responseBody(staleContent))?.error?.code, 'CONTENT_STALE_UPDATE');
+
+const reviewedContent = await request(`${contentBase}/${content.id}/transition`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({ expectedVersion: 2, nextStatus: 'IN_REVIEW' }),
+});
+assert.equal(reviewedContent.version, 3);
+const revisions = await request(`${contentBase}/${content.id}/revisions`, {
+  headers: authorization,
+});
+assert.deepEqual(
+  revisions.map((revision) => revision.revisionNumber),
+  [3, 2, 1],
+);
+
+const archivedContent = await request(`${contentBase}/${content.id}/archive`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({ expectedVersion: 3, reason: 'Fin de validation' }),
+});
+assert.equal(archivedContent.editorialStatus, 'ARCHIVED');
+
 const isolated = await fetch(
   `${apiUrl}/workspaces/${isolationWorkspace.id}/websites/${website.id}`,
   { headers: authorization },
 );
 assert.equal(isolated.status, 404, 'A raw Website ID crossed a workspace boundary.');
+const isolatedContent = await fetch(
+  `${apiUrl}/workspaces/${isolationWorkspace.id}/websites/${website.id}/contents/${content.id}`,
+  { headers: authorization },
+);
+assert.equal(isolatedContent.status, 404, 'A raw Content ID crossed a workspace boundary.');
 
 const integrationStatus = await request(`${apiUrl}/integrations/status`);
 assert.equal(integrationStatus.bloggerMode, 'MOCK');
@@ -307,5 +378,5 @@ await request(`${apiUrl}/auth/logout`, {
 });
 
 console.log(
-  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Mock Blogger OAuth/discovery/selection/sync/import/labels/draft idempotency/safety/disconnect.',
+  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Mock Blogger OAuth/discovery/selection/sync/import/labels/draft idempotency/safety/disconnect.',
 );

@@ -22,4 +22,16 @@ describe('fixed workspace permissions', () => {
     expect(permissionsForRole('WRITER')).toContain('providerPublishing.createDraft');
     expect(permissionsForRole('VIEWER')).not.toContain('providerPublishing.createDraft');
   });
+
+  it('applies the fixed Phase 3A editorial matrix', () => {
+    expect(permissionsForRole('OWNER')).toContain('contents.archive');
+    expect(permissionsForRole('EDITOR')).toContain('contents.assign');
+    expect(permissionsForRole('REVIEWER')).toContain('contents.transition');
+    expect(permissionsForRole('REVIEWER')).not.toContain('contents.update');
+    expect(permissionsForRole('SEO_MANAGER')).toContain('contents.seo.update');
+    expect(permissionsForRole('SEO_MANAGER')).not.toContain('contents.update');
+    expect(permissionsForRole('WRITER')).toContain('contents.create');
+    expect(permissionsForRole('VIEWER')).toContain('contents.revisions.read');
+    expect(permissionsForRole('VIEWER')).not.toContain('contents.create');
+  });
 });

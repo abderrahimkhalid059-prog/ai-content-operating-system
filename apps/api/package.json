@@ -9,8 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run test/health.spec.ts test/system.controller.spec.ts test/password.spec.ts test/permissions.spec.ts test/request-log.spec.ts",
-    "test:integration": "vitest run test/error-format.integration.spec.ts test/phase1.integration.spec.ts test/phase2-blogger.integration.spec.ts"
+    "test:unit": "vitest run test/health.spec.ts test/system.controller.spec.ts test/password.spec.ts test/permissions.spec.ts test/request-log.spec.ts test/content-domain.spec.ts",
+    "test:integration": "vitest run --no-file-parallelism test/error-format.integration.spec.ts test/phase1.integration.spec.ts test/phase2-blogger.integration.spec.ts test/phase3a-content.integration.spec.ts"
   },
   "dependencies": {
     "@ai-content-os/config": "*",
@@ -34,12 +34,14 @@
     "nestjs-pino": "^4.4.1",
     "pino": "^10.1.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sanitize-html": "^2.17.6"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.9",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.5",
+    "@types/sanitize-html": "^2.16.1",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4"
   }

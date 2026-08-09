@@ -33,8 +33,8 @@ async function bootstrap(): Promise<void> {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('AI Content Operating System API')
-    .setDescription('API Phase 1 — identité et cœur multi-site')
-    .setVersion('0.2.0')
+    .setDescription('API Phase 3A — domaine de contenu et éditeur manuel')
+    .setVersion('0.4.0')
     .addBearerAuth()
     .addCookieAuth('refreshCookie', {
       type: 'apiKey',

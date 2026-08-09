@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
-import { NavLink, useHistory } from 'react-router-dom';
+import { NavLink, useHistory, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/auth-context';
 
 export function AppLayout({ children }: { children: ReactNode }): React.JSX.Element {
   const auth = useAuth();
   const history = useHistory();
+  const location = useLocation();
   const selected = auth.selectedWorkspaceId;
   const canManageUsers =
     auth.user?.workspaces.some((workspace) => workspace.permissions.includes('users.read')) ??
     false;
+  const websiteMatch = location.pathname.match(/^\/espaces\/([^/]+)\/sites\/([^/]+)/);
+  const activeWorkspaceId = websiteMatch?.[1];
+  const activeWebsiteId = websiteMatch?.[2];
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -25,6 +29,13 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
             <>
               <NavLink to={`/espaces/${selected}/membres`}>Membres</NavLink>
               <NavLink to={`/espaces/${selected}/sites`}>Sites</NavLink>
+              {activeWorkspaceId === selected &&
+                activeWebsiteId &&
+                auth.can('contents.read', selected) && (
+                  <NavLink to={`/espaces/${selected}/sites/${activeWebsiteId}/contenus`}>
+                    Contenus
+                  </NavLink>
+                )}
             </>
           )}
           {canManageUsers && <NavLink to="/utilisateurs">Utilisateurs</NavLink>}
@@ -32,7 +43,7 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
           <NavLink to="/securite/sessions">Sessions</NavLink>
           <NavLink to="/systeme">Système</NavLink>
         </nav>
-        <div className="sidebar-note">Identité, multi-site & Blogger · Phase 2</div>
+        <div className="sidebar-note">Identité, multi-site, Blogger & contenus · Phase 3A</div>
       </aside>
       <div className="main-column">
         <header className="topbar">

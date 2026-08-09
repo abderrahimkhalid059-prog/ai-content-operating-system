@@ -83,6 +83,12 @@ export function WebsiteFormPage(): React.JSX.Element {
         </div>
         {editing && (
           <div className="button-row">
+            <Link
+              className="primary-button"
+              to={`/espaces/${workspaceId}/sites/${websiteId}/contenus`}
+            >
+              Contenus
+            </Link>
             {website.data?.platform === 'BLOGGER' && (
               <Link
                 className="primary-button"

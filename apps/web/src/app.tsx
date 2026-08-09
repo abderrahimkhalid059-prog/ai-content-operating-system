@@ -5,6 +5,11 @@ import { PermissionRoute, ProtectedRoute } from './auth/protected-route';
 import { AppLayout } from './components/app-layout';
 import { ErrorBoundary } from './components/error-boundary';
 import { ContentProfilesPage } from './pages/content-profiles/content-profiles';
+import {
+  ContentEditorPage,
+  ContentListPage,
+  ContentRevisionsPage,
+} from './pages/contents/content-ui';
 import { DashboardPage } from './pages/dashboard';
 import { ForbiddenPage } from './pages/forbidden';
 import { LoginPage } from './pages/auth/login';
@@ -76,6 +81,32 @@ export function App(): React.JSX.Element {
                       <Route exact path="/espaces/:workspaceId/sites/:websiteId/profils-editoriaux">
                         <PermissionRoute permission="contentProfiles.read">
                           <ContentProfilesPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route exact path="/espaces/:workspaceId/sites/:websiteId/contenus">
+                        <PermissionRoute permission="contents.read">
+                          <ContentListPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route exact path="/espaces/:workspaceId/sites/:websiteId/contenus/nouveau">
+                        <PermissionRoute permission="contents.create">
+                          <ContentEditorPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route
+                        exact
+                        path="/espaces/:workspaceId/sites/:websiteId/contenus/:contentId/versions"
+                      >
+                        <PermissionRoute permission="contents.revisions.read">
+                          <ContentRevisionsPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route
+                        exact
+                        path="/espaces/:workspaceId/sites/:websiteId/contenus/:contentId"
+                      >
+                        <PermissionRoute permission="contents.read">
+                          <ContentEditorPage />
                         </PermissionRoute>
                       </Route>
                       <Route

@@ -57,6 +57,14 @@ export type Permission =
   | 'contentProfiles.create'
   | 'contentProfiles.update'
   | 'contentProfiles.delete'
+  | 'contents.read'
+  | 'contents.create'
+  | 'contents.update'
+  | 'contents.assign'
+  | 'contents.transition'
+  | 'contents.archive'
+  | 'contents.revisions.read'
+  | 'contents.seo.update'
   | 'integrations.read'
   | 'integrations.connect'
   | 'integrations.update'
@@ -165,6 +173,77 @@ export interface ContentProfileSummary {
   status: ContentProfileStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+export type ContentEditorialStatus =
+  | 'IDEA'
+  | 'RESEARCHING'
+  | 'OUTLINED'
+  | 'DRAFT'
+  | 'IN_REVIEW'
+  | 'CHANGES_REQUESTED'
+  | 'APPROVED'
+  | 'READY_TO_PUBLISH'
+  | 'PUBLISHED'
+  | 'ARCHIVED';
+
+export type ContentPublicationStatus =
+  'NOT_PUBLISHED' | 'DRAFT_SENT' | 'PUBLISHING' | 'PUBLISHED' | 'FAILED';
+
+export interface ContentItemSummary {
+  id: string;
+  workspaceId: string;
+  websiteId: string;
+  contentProfileId?: string;
+  title: string;
+  slug: string;
+  excerpt?: string;
+  htmlContent: string;
+  plainTextContent: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  language: string;
+  locale?: string;
+  featuredImageReference?: string;
+  labels: string[];
+  wordCount: number;
+  estimatedReadingMinutes: number;
+  editorialStatus: ContentEditorialStatus;
+  publicationStatus: ContentPublicationStatus;
+  version: number;
+  createdByUserId: string;
+  assignedToUserId?: string;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContentRevisionSummary {
+  id: string;
+  contentItemId: string;
+  revisionNumber: number;
+  title: string;
+  slug: string;
+  excerpt?: string;
+  htmlContent: string;
+  plainTextContent: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  language: string;
+  locale?: string;
+  featuredImageReference?: string;
+  labels: string[];
+  wordCount: number;
+  estimatedReadingMinutes: number;
+  editorialStatus: ContentEditorialStatus;
+  publicationStatus: ContentPublicationStatus;
+  assignedToUserId?: string;
+  contentProfileId?: string;
+  changedByUserId: string;
+  changeReason?: string;
+  changedAt: string;
 }
 
 export interface TemporaryPasswordResponse {

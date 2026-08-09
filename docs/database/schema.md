@@ -29,3 +29,15 @@ deduplicates normalized Blogger labels while retaining display names and usage c
 index prevents two active runs per connection. `ProviderPublication` uniquely reserves idempotency
 keys and request hashes before external mutations. All tenant records include Workspace and Website
 foreign keys. Phase 2 migration `20260728110000_phase_2_blogger_integration` is additive.
+
+# Phase 3A content records
+
+Migration `20260809120000_phase_3a_content_domain` adds `content_items` and `content_revisions`
+without changing prior migrations. A content item is unique by `(workspace_id, website_id, slug)`;
+composite foreign keys prevent a profile or content from crossing its site boundary. Editorial and
+publication statuses use separate PostgreSQL enums.
+
+`content_revisions` stores immutable snapshots numbered from the content’s optimistic `version`.
+Metrics have non-negative checks, revisions have a positive-number check, and indexes cover the
+site/status chronology, publication state, assignee, creator, profile and revision history. Content
+archival is logical and content deletion is not exposed by the Phase 3A API.

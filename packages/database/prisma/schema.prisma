@@ -106,23 +106,47 @@ enum ProviderPublicationStatus {
   FAILED
 }
 
+enum ContentEditorialStatus {
+  IDEA
+  RESEARCHING
+  OUTLINED
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  READY_TO_PUBLISH
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ContentPublicationStatus {
+  NOT_PUBLISHED
+  DRAFT_SENT
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
 model User {
-  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email              String              @unique @db.VarChar(320)
-  displayName        String?             @map("display_name") @db.VarChar(120)
-  passwordHash       String              @map("password_hash") @db.VarChar(255)
-  status             UserStatus          @default(ACTIVE)
-  mustChangePassword Boolean             @default(true) @map("must_change_password")
-  securityVersion    Int                 @default(1) @map("security_version")
-  lastLoginAt        DateTime?           @map("last_login_at") @db.Timestamptz(3)
-  passwordChangedAt  DateTime?           @map("password_changed_at") @db.Timestamptz(3)
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspaceMembers   WorkspaceMember[]
-  sessions           Session[]
-  auditLogs          AuditLog[]          @relation("AuditActor")
-  connectedProviders WebsiteConnection[] @relation("ProviderConnectedBy")
-  oauthStates        OAuthState[]        @relation("OAuthStateUser")
+  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String              @unique @db.VarChar(320)
+  displayName          String?             @map("display_name") @db.VarChar(120)
+  passwordHash         String              @map("password_hash") @db.VarChar(255)
+  status               UserStatus          @default(ACTIVE)
+  mustChangePassword   Boolean             @default(true) @map("must_change_password")
+  securityVersion      Int                 @default(1) @map("security_version")
+  lastLoginAt          DateTime?           @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt    DateTime?           @map("password_changed_at") @db.Timestamptz(3)
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspaceMembers     WorkspaceMember[]
+  sessions             Session[]
+  auditLogs            AuditLog[]          @relation("AuditActor")
+  connectedProviders   WebsiteConnection[] @relation("ProviderConnectedBy")
+  oauthStates          OAuthState[]        @relation("OAuthStateUser")
+  createdContentItems  ContentItem[]       @relation("ContentCreatedBy")
+  assignedContentItems ContentItem[]       @relation("ContentAssignedTo")
+  contentRevisions     ContentRevision[]   @relation("ContentRevisionChangedBy")
 
   @@map("users")
 }
@@ -142,6 +166,8 @@ model Workspace {
   jobRecords         JobRecord[]
   websiteConnections WebsiteConnection[]
   oauthStates        OAuthState[]
+  contentItems       ContentItem[]
+  contentRevisions   ContentRevision[]
 
   @@map("workspaces")
 }
@@ -162,25 +188,27 @@ model WorkspaceMember {
 }
 
 model Website {
-  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId     String              @map("workspace_id") @db.Uuid
-  name            String              @db.VarChar(160)
-  slug            String              @db.VarChar(120)
-  platform        WebsitePlatform
-  language        String              @db.VarChar(10)
-  locale          String?             @db.VarChar(35)
-  timezone        String              @db.VarChar(64)
-  description     String?             @db.VarChar(1000)
-  status          WebsiteStatus       @default(DRAFT)
-  deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(3)
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace       Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  auditLogs       AuditLog[]
-  jobRecords      JobRecord[]
-  contentProfiles ContentProfile[]
-  connections     WebsiteConnection[]
-  oauthStates     OAuthState[]
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String              @map("workspace_id") @db.Uuid
+  name             String              @db.VarChar(160)
+  slug             String              @db.VarChar(120)
+  platform         WebsitePlatform
+  language         String              @db.VarChar(10)
+  locale           String?             @db.VarChar(35)
+  timezone         String              @db.VarChar(64)
+  description      String?             @db.VarChar(1000)
+  status           WebsiteStatus       @default(DRAFT)
+  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(3)
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs        AuditLog[]
+  jobRecords       JobRecord[]
+  contentProfiles  ContentProfile[]
+  connections      WebsiteConnection[]
+  oauthStates      OAuthState[]
+  contentItems     ContentItem[]
+  contentRevisions ContentRevision[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
@@ -265,11 +293,94 @@ model ContentProfile {
   createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
   website          Website              @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItems     ContentItem[]
 
   @@unique([websiteId, name])
+  @@unique([id, workspaceId, websiteId])
   @@index([workspaceId, websiteId, status])
   @@index([websiteId, isDefault, status])
   @@map("content_profiles")
+}
+
+model ContentItem {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId             String                   @map("workspace_id") @db.Uuid
+  websiteId               String                   @map("website_id") @db.Uuid
+  contentProfileId        String?                  @map("content_profile_id") @db.Uuid
+  title                   String                   @db.VarChar(300)
+  slug                    String                   @db.VarChar(120)
+  excerpt                 String?                  @db.VarChar(1000)
+  htmlContent             String                   @map("html_content") @db.Text
+  plainTextContent        String                   @map("plain_text_content") @db.Text
+  metaTitle               String?                  @map("meta_title") @db.VarChar(70)
+  metaDescription         String?                  @map("meta_description") @db.VarChar(180)
+  canonicalUrl            String?                  @map("canonical_url") @db.VarChar(1500)
+  language                String                   @db.VarChar(10)
+  locale                  String?                  @db.VarChar(35)
+  featuredImageReference  String?                  @map("featured_image_reference") @db.VarChar(1000)
+  labels                  Json
+  wordCount               Int                      @map("word_count")
+  estimatedReadingMinutes Int                      @map("estimated_reading_minutes")
+  editorialStatus         ContentEditorialStatus   @default(IDEA) @map("editorial_status")
+  publicationStatus       ContentPublicationStatus @default(NOT_PUBLISHED) @map("publication_status")
+  version                 Int                      @default(1)
+  createdByUserId         String                   @map("created_by_user_id") @db.Uuid
+  assignedToUserId        String?                  @map("assigned_to_user_id") @db.Uuid
+  archivedAt              DateTime?                @map("archived_at") @db.Timestamptz(3)
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website                 Website                  @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentProfile          ContentProfile?          @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Restrict)
+  createdBy               User                     @relation("ContentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  assignedTo              User?                    @relation("ContentAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  revisions               ContentRevision[]
+
+  @@unique([workspaceId, websiteId, slug])
+  @@unique([id, workspaceId, websiteId])
+  @@index([workspaceId, websiteId, editorialStatus, updatedAt], map: "content_items_workspace_id_website_id_editorial_status_updated_")
+  @@index([workspaceId, websiteId, publicationStatus, updatedAt], map: "content_items_workspace_id_website_id_publication_status_update")
+  @@index([workspaceId, websiteId, assignedToUserId])
+  @@index([workspaceId, websiteId, createdByUserId])
+  @@index([workspaceId, websiteId, contentProfileId])
+  @@map("content_items")
+}
+
+model ContentRevision {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId             String                   @map("workspace_id") @db.Uuid
+  websiteId               String                   @map("website_id") @db.Uuid
+  contentItemId           String                   @map("content_item_id") @db.Uuid
+  revisionNumber          Int                      @map("revision_number")
+  title                   String                   @db.VarChar(300)
+  slug                    String                   @db.VarChar(120)
+  excerpt                 String?                  @db.VarChar(1000)
+  htmlContent             String                   @map("html_content") @db.Text
+  plainTextContent        String                   @map("plain_text_content") @db.Text
+  metaTitle               String?                  @map("meta_title") @db.VarChar(70)
+  metaDescription         String?                  @map("meta_description") @db.VarChar(180)
+  canonicalUrl            String?                  @map("canonical_url") @db.VarChar(1500)
+  language                String                   @db.VarChar(10)
+  locale                  String?                  @db.VarChar(35)
+  featuredImageReference  String?                  @map("featured_image_reference") @db.VarChar(1000)
+  labels                  Json
+  wordCount               Int                      @map("word_count")
+  estimatedReadingMinutes Int                      @map("estimated_reading_minutes")
+  editorialStatus         ContentEditorialStatus   @map("editorial_status")
+  publicationStatus       ContentPublicationStatus @map("publication_status")
+  assignedToUserId        String?                  @map("assigned_to_user_id") @db.Uuid
+  contentProfileId        String?                  @map("content_profile_id") @db.Uuid
+  changedByUserId         String                   @map("changed_by_user_id") @db.Uuid
+  changeReason            String?                  @map("change_reason") @db.VarChar(500)
+  changedAt               DateTime                 @default(now()) @map("changed_at") @db.Timestamptz(3)
+  contentItem             ContentItem              @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website                 Website                  @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  changedBy               User                     @relation("ContentRevisionChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([contentItemId, revisionNumber])
+  @@index([workspaceId, websiteId, contentItemId, revisionNumber], map: "content_revisions_workspace_id_website_id_content_item_id_revis")
+  @@map("content_revisions")
 }
 
 model JobRecord {

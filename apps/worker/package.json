@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run test/worker.spec.ts",
-    "test:integration": "vitest run test/queue.integration.spec.ts test/blogger-sync.integration.spec.ts"
+    "test:integration": "vitest run --no-file-parallelism test/queue.integration.spec.ts test/blogger-sync.integration.spec.ts"
   },
   "dependencies": {
     "@ai-content-os/config": "*",

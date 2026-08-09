@@ -27,3 +27,15 @@ queue transport.
 Mock and Live are selected centrally. Live credentials are AES-256-GCM envelopes decrypted only
 inside backend provider composition. The React client sees only safe summaries and server safety
 flags. Imported external posts are snapshots, not generated Articles.
+
+## Phase 3A content domain
+
+`ContentItem` is the provider-neutral editorial source of truth. It belongs to one workspace and
+website, may reference a content profile and assignee, and carries separate editorial and external
+publication states. The API applies field-level permissions, tenant predicates, HTML sanitization,
+server-calculated metrics and optimistic concurrency.
+
+Every accepted mutation creates an immutable `ContentRevision` in the same serializable
+transaction. The browser provides French list, manual editor and revision-history views but does
+not render stored HTML as executable markup. Phase 3A has no queue, AI generation or provider
+publishing path.

@@ -14,6 +14,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuditApiModule } from './modules/audit/audit-api.module';
 import { ContentProfilesModule } from './modules/content-profiles/content-profiles.module';
+import { ContentsModule } from './modules/contents/contents.module';
 import { HealthModule } from './modules/health/health.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { SystemModule } from './modules/system/system.module';
@@ -71,6 +72,7 @@ import { WebsitesModule } from './modules/websites/websites.module';
     WorkspacesModule,
     WebsitesModule,
     ContentProfilesModule,
+    ContentsModule,
     IntegrationsModule,
     HealthModule,
     SystemModule,

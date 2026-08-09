@@ -350,6 +350,72 @@ h2 {
   min-width: 190px;
   flex: 1;
 }
+.content-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(170px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+.content-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.content-editor-layout h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.html-editor {
+  min-height: 460px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  line-height: 1.55;
+}
+.editor-metrics {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+.content-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+.revision-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.6fr);
+  gap: 20px;
+  align-items: start;
+}
+.revision-card {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 7px;
+  color: inherit;
+}
+.revision-card span,
+.revision-card small {
+  color: var(--muted);
+}
+.revision-preview pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 15px;
+  border-radius: 9px;
+  background: #f7f8fb;
+  color: #30394f;
+}
 .two-column {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -620,7 +686,10 @@ tbody tr:last-child td {
   .stat-grid,
   .status-grid,
   .two-column,
-  .form-grid {
+  .form-grid,
+  .content-filters,
+  .content-editor-layout,
+  .revision-layout {
     grid-template-columns: 1fr;
   }
   .span-two {

@@ -1,8 +1,8 @@
 # AI Content Operating System
 
-Production-oriented Phase 2 Blogger-integration foundation for a content operations SaaS. It
-preserves the Phase 0/1 identity and multi-website core and adds a secure, workspace-scoped,
-draft-first Blogger transport that is fully usable in deterministic Mock mode.
+Production-oriented Phase 3A foundation for a content operations SaaS. It preserves the validated
+identity, multi-website and Blogger layers and adds a provider-neutral content domain, immutable
+revisions and a secure French manual editor.
 
 ## Architecture
 
@@ -46,6 +46,9 @@ requires Google OAuth values and an AES-256-GCM key. Public publish and delete d
 See [Blogger API](docs/api/blogger.md) and the
 [future Live checklist](docs/integrations/blogger-live-validation.md).
 
+The content API is documented in [docs/api/contents.md](docs/api/contents.md). Phase 3A content is
+independent of Blogger: saving or transitioning an editorial record never publishes externally.
+
 ## Commands
 
 | Command                                           | Purpose                                            |
@@ -80,13 +83,13 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 2 scope
+## Phase 3A scope
 
-Implemented: all validated Phase 0/1 behavior plus provider abstraction, deterministic Mock OAuth
-and Blogger fixtures, Live HTTP adapter contract, encrypted live credentials, secure one-time OAuth
-state, blog discovery/selection, BullMQ imports, labels, manual draft CRUD, safety ceilings,
-idempotency, audit and French administration.
+Implemented: all validated Phase 0–2 behavior plus tenant-scoped manual content CRUD, editorial
+workflow, separate publication state, HTML safety, normalized slugs/labels, calculated metrics,
+assignment, content-profile association, optimistic concurrency, immutable revisions, audit and a
+French list/editor/history interface.
 
-Not implemented: real Google/Blogger validation, automatic or scheduled publishing, WordPress,
-AI/content generation, research, fact verification, SEO engines, images, affiliates, analytics,
-billing or any Phase 3 feature. Development fixtures are not production credentials or content.
+Not implemented: Phase 3B, AI/content generation, research, fact verification, SEO engines, image
+generation, automatic or scheduled publishing, WordPress, affiliates, analytics or billing.
+Development fixtures are not production credentials or content.

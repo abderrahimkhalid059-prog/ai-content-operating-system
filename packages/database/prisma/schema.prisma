@@ -127,6 +127,23 @@ enum ContentPublicationStatus {
   FAILED
 }
 
+enum ContentCommentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ContentReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum ContentPublicationBindingStatus {
+  PENDING
+  ACTIVE
+  MISSING
+  ERROR
+}
+
 model User {
   id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                String              @unique @db.VarChar(320)
@@ -147,27 +164,33 @@ model User {
   createdContentItems  ContentItem[]       @relation("ContentCreatedBy")
   assignedContentItems ContentItem[]       @relation("ContentAssignedTo")
   contentRevisions     ContentRevision[]   @relation("ContentRevisionChangedBy")
+  contentComments      ContentComment[]    @relation("ContentCommentAuthor")
+  resolvedComments     ContentComment[]    @relation("ContentCommentResolver")
+  contentReviews       ContentReview[]     @relation("ContentReviewer")
 
   @@map("users")
 }
 
 model Workspace {
-  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name               String              @db.VarChar(120)
-  slug               String              @unique @db.VarChar(100)
-  isActive           Boolean             @default(true) @map("is_active")
-  deactivatedAt      DateTime?           @map("deactivated_at") @db.Timestamptz(3)
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  members            WorkspaceMember[]
-  websites           Website[]
-  settings           SystemSetting[]
-  auditLogs          AuditLog[]
-  jobRecords         JobRecord[]
-  websiteConnections WebsiteConnection[]
-  oauthStates        OAuthState[]
-  contentItems       ContentItem[]
-  contentRevisions   ContentRevision[]
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String               @db.VarChar(120)
+  slug                String               @unique @db.VarChar(100)
+  isActive            Boolean              @default(true) @map("is_active")
+  deactivatedAt       DateTime?            @map("deactivated_at") @db.Timestamptz(3)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members             WorkspaceMember[]
+  websites            Website[]
+  settings            SystemSetting[]
+  auditLogs           AuditLog[]
+  jobRecords          JobRecord[]
+  websiteConnections  WebsiteConnection[]
+  oauthStates         OAuthState[]
+  contentItems        ContentItem[]
+  contentRevisions    ContentRevision[]
+  contentComments     ContentComment[]
+  contentReviews      ContentReview[]
+  contentPublications ContentPublication[]
 
   @@map("workspaces")
 }
@@ -188,27 +211,30 @@ model WorkspaceMember {
 }
 
 model Website {
-  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId      String              @map("workspace_id") @db.Uuid
-  name             String              @db.VarChar(160)
-  slug             String              @db.VarChar(120)
-  platform         WebsitePlatform
-  language         String              @db.VarChar(10)
-  locale           String?             @db.VarChar(35)
-  timezone         String              @db.VarChar(64)
-  description      String?             @db.VarChar(1000)
-  status           WebsiteStatus       @default(DRAFT)
-  deletedAt        DateTime?           @map("deleted_at") @db.Timestamptz(3)
-  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  auditLogs        AuditLog[]
-  jobRecords       JobRecord[]
-  contentProfiles  ContentProfile[]
-  connections      WebsiteConnection[]
-  oauthStates      OAuthState[]
-  contentItems     ContentItem[]
-  contentRevisions ContentRevision[]
+  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId         String               @map("workspace_id") @db.Uuid
+  name                String               @db.VarChar(160)
+  slug                String               @db.VarChar(120)
+  platform            WebsitePlatform
+  language            String               @db.VarChar(10)
+  locale              String?              @db.VarChar(35)
+  timezone            String               @db.VarChar(64)
+  description         String?              @db.VarChar(1000)
+  status              WebsiteStatus        @default(DRAFT)
+  deletedAt           DateTime?            @map("deleted_at") @db.Timestamptz(3)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs           AuditLog[]
+  jobRecords          JobRecord[]
+  contentProfiles     ContentProfile[]
+  connections         WebsiteConnection[]
+  oauthStates         OAuthState[]
+  contentItems        ContentItem[]
+  contentRevisions    ContentRevision[]
+  contentComments     ContentComment[]
+  contentReviews      ContentReview[]
+  contentPublications ContentPublication[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
@@ -335,6 +361,9 @@ model ContentItem {
   createdBy               User                     @relation("ContentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   assignedTo              User?                    @relation("ContentAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   revisions               ContentRevision[]
+  comments                ContentComment[]
+  reviews                 ContentReview[]
+  publications            ContentPublication[]
 
   @@unique([workspaceId, websiteId, slug])
   @@unique([id, workspaceId, websiteId])
@@ -377,10 +406,86 @@ model ContentRevision {
   workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   website                 Website                  @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   changedBy               User                     @relation("ContentRevisionChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
+  reviews                 ContentReview[]
 
   @@unique([contentItemId, revisionNumber])
+  @@unique([id, workspaceId, websiteId, contentItemId], map: "content_revisions_id_workspace_id_website_id_content_item_id_ke")
   @@index([workspaceId, websiteId, contentItemId, revisionNumber], map: "content_revisions_workspace_id_website_id_content_item_id_revis")
   @@map("content_revisions")
+}
+
+model ContentComment {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String               @map("workspace_id") @db.Uuid
+  websiteId        String               @map("website_id") @db.Uuid
+  contentItemId    String               @map("content_item_id") @db.Uuid
+  authorUserId     String               @map("author_user_id") @db.Uuid
+  message          String               @db.VarChar(4000)
+  status           ContentCommentStatus @default(OPEN)
+  resolvedAt       DateTime?            @map("resolved_at") @db.Timestamptz(3)
+  resolvedByUserId String?              @map("resolved_by_user_id") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace        Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website          Website              @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItem      ContentItem          @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  author           User                 @relation("ContentCommentAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  resolvedBy       User?                @relation("ContentCommentResolver", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([id, workspaceId, websiteId, contentItemId])
+  @@index([workspaceId, websiteId, contentItemId, status, createdAt], map: "content_comments_workspace_id_website_id_content_item_id_status")
+  @@map("content_comments")
+}
+
+model ContentReview {
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId            String                @map("workspace_id") @db.Uuid
+  websiteId              String                @map("website_id") @db.Uuid
+  contentItemId          String                @map("content_item_id") @db.Uuid
+  contentRevisionId      String                @map("content_revision_id") @db.Uuid
+  reviewerUserId         String                @map("reviewer_user_id") @db.Uuid
+  decision               ContentReviewDecision
+  note                   String?               @db.VarChar(4000)
+  reviewedRevisionNumber Int                   @map("reviewed_revision_number")
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace              Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website                Website               @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItem            ContentItem           @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  contentRevision        ContentRevision       @relation(fields: [contentRevisionId, workspaceId, websiteId, contentItemId], references: [id, workspaceId, websiteId, contentItemId], onDelete: Restrict, map: "content_reviews_content_revision_id_workspace_id_website_id_con")
+  reviewer               User                  @relation("ContentReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, websiteId, contentItemId, createdAt], map: "content_reviews_workspace_id_website_id_content_item_id_created")
+  @@index([reviewerUserId, createdAt])
+  @@map("content_reviews")
+}
+
+model ContentPublication {
+  id                             String                          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                    String                          @map("workspace_id") @db.Uuid
+  websiteId                      String                          @map("website_id") @db.Uuid
+  contentItemId                  String                          @map("content_item_id") @db.Uuid
+  connectionId                   String                          @map("connection_id") @db.Uuid
+  provider                       PublishingProviderType
+  externalSiteId                 String                          @map("external_site_id") @db.VarChar(255)
+  externalPostId                 String?                         @map("external_post_id") @db.VarChar(255)
+  status                         ContentPublicationBindingStatus @default(PENDING)
+  lastSynchronizedRevisionNumber Int?                            @map("last_synchronized_revision_number")
+  lastSynchronizedHash           String?                         @map("last_synchronized_hash") @db.Char(64)
+  lastErrorCode                  String?                         @map("last_error_code") @db.VarChar(120)
+  missingConfirmedAt             DateTime?                       @map("missing_confirmed_at") @db.Timestamptz(3)
+  createdAt                      DateTime                        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                      DateTime                        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace                      Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website                        Website                         @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItem                    ContentItem                     @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade, map: "content_publications_content_item_id_workspace_id_website_id_fk")
+  connection                     WebsiteConnection               @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Restrict)
+  operations                     ProviderPublication[]
+
+  @@unique([id, workspaceId, websiteId])
+  @@unique([contentItemId, provider, externalSiteId], map: "content_publications_content_item_id_provider_external_site_id_")
+  @@index([workspaceId, websiteId, status, updatedAt], map: "content_publications_workspace_id_website_id_status_updated_at_")
+  @@index([connectionId, externalPostId])
+  @@map("content_publications")
 }
 
 model JobRecord {
@@ -436,6 +541,7 @@ model WebsiteConnection {
   taxonomyTerms        ExternalTaxonomyTerm[]
   syncRuns             IntegrationSyncRun[]
   publications         ProviderPublication[]
+  contentPublications  ContentPublication[]
 
   @@unique([id, workspaceId, websiteId])
   @@index([workspaceId, status])
@@ -543,25 +649,28 @@ model IntegrationSyncRun {
 }
 
 model ProviderPublication {
-  id             String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId    String                       @map("workspace_id") @db.Uuid
-  websiteId      String                       @map("website_id") @db.Uuid
-  connectionId   String                       @map("connection_id") @db.Uuid
-  provider       PublishingProviderType
-  idempotencyKey String                       @map("idempotency_key") @db.VarChar(160)
-  operationType  ProviderPublicationOperation @map("operation_type")
-  externalPostId String?                      @map("external_post_id") @db.VarChar(255)
-  requestHash    String                       @map("request_hash") @db.Char(64)
-  status         ProviderPublicationStatus    @default(PENDING)
-  attemptCount   Int                          @default(0) @map("attempt_count")
-  lastAttemptAt  DateTime?                    @map("last_attempt_at") @db.Timestamptz(3)
-  completedAt    DateTime?                    @map("completed_at") @db.Timestamptz(3)
-  safeErrorCode  String?                      @map("safe_error_code") @db.VarChar(120)
-  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  connection     WebsiteConnection            @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  id                   String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId          String                       @map("workspace_id") @db.Uuid
+  websiteId            String                       @map("website_id") @db.Uuid
+  connectionId         String                       @map("connection_id") @db.Uuid
+  contentPublicationId String?                      @map("content_publication_id") @db.Uuid
+  provider             PublishingProviderType
+  idempotencyKey       String                       @map("idempotency_key") @db.VarChar(160)
+  operationType        ProviderPublicationOperation @map("operation_type")
+  externalPostId       String?                      @map("external_post_id") @db.VarChar(255)
+  requestHash          String                       @map("request_hash") @db.Char(64)
+  status               ProviderPublicationStatus    @default(PENDING)
+  attemptCount         Int                          @default(0) @map("attempt_count")
+  lastAttemptAt        DateTime?                    @map("last_attempt_at") @db.Timestamptz(3)
+  completedAt          DateTime?                    @map("completed_at") @db.Timestamptz(3)
+  safeErrorCode        String?                      @map("safe_error_code") @db.VarChar(120)
+  createdAt            DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  connection           WebsiteConnection            @relation(fields: [connectionId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  contentPublication   ContentPublication?          @relation(fields: [contentPublicationId], references: [id], onDelete: SetNull)
 
   @@unique([connectionId, provider, idempotencyKey])
+  @@unique([contentPublicationId, idempotencyKey], map: "provider_publications_content_publication_id_idempotency_key_ke")
   @@index([workspaceId, websiteId, status])
   @@index([connectionId, externalPostId])
   @@map("provider_publications")

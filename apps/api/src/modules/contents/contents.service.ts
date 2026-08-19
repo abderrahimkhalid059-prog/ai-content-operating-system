@@ -9,12 +9,14 @@ import {
   ContentEditorialStatus,
   ContentProfileStatus,
   ContentPublicationStatus,
+  ContentReviewDecision,
   DatabaseService,
   Prisma,
   UserStatus,
   WorkspaceRole,
   type ContentItem,
   type ContentRevision,
+  type ContentReview,
 } from '@ai-content-os/database';
 import { ERROR_CODES } from '@ai-content-os/shared';
 import type {
@@ -328,6 +330,13 @@ export class ContentsService {
     request: AuthenticatedRequest,
   ): Promise<ContentItemSummary> {
     const current = await this.find(workspace.id, websiteId, contentId);
+    if (
+      current.editorialStatus === ContentEditorialStatus.IN_REVIEW &&
+      (input.nextStatus === ContentEditorialStatus.APPROVED ||
+        input.nextStatus === ContentEditorialStatus.CHANGES_REQUESTED)
+    ) {
+      this.invalidTransition('Utilisez une décision du Centre de révision.');
+    }
     if (input.nextStatus === ContentEditorialStatus.ARCHIVED) {
       throw new CodedHttpException(
         HttpStatus.BAD_REQUEST,
@@ -367,6 +376,81 @@ export class ContentsService {
     );
     await this.auditRevision(updated, actor, request);
     return this.present(updated);
+  }
+
+  async decideReview(
+    actor: AuthContext,
+    workspace: WorkspaceContext,
+    websiteId: string,
+    contentId: string,
+    decision: ContentReviewDecision,
+    reviewedRevisionNumber: number,
+    note?: string,
+  ): Promise<{ item: ContentItem; review: ContentReview }> {
+    const current = await this.find(workspace.id, websiteId, contentId);
+    const next =
+      decision === ContentReviewDecision.APPROVED
+        ? ContentEditorialStatus.APPROVED
+        : ContentEditorialStatus.CHANGES_REQUESTED;
+    this.assertRoleTransition(workspace, current.editorialStatus, next);
+    if (!canTransitionEditorialStatus(current.editorialStatus, next)) this.invalidTransition();
+    if (current.version !== reviewedRevisionNumber) {
+      throw new CodedHttpException(
+        HttpStatus.CONFLICT,
+        ERROR_CODES.contentReviewStale,
+        'Une version plus récente existe. Relisez la dernière version avant de décider.',
+      );
+    }
+    const normalizedNote = this.optionalText(note);
+    if (decision === ContentReviewDecision.CHANGES_REQUESTED && !normalizedNote) {
+      throw new CodedHttpException(
+        HttpStatus.BAD_REQUEST,
+        ERROR_CODES.contentReviewNoteRequired,
+        'Une note est requise pour demander des modifications.',
+      );
+    }
+    return this.database.$transaction(
+      async (transaction) => {
+        const reviewedRevision = await transaction.contentRevision.findFirst({
+          where: {
+            workspaceId: workspace.id,
+            websiteId,
+            contentItemId: contentId,
+            revisionNumber: reviewedRevisionNumber,
+          },
+        });
+        if (!reviewedRevision) this.staleReview();
+        const changed = await transaction.contentItem.updateMany({
+          where: {
+            id: contentId,
+            workspaceId: workspace.id,
+            websiteId,
+            version: reviewedRevisionNumber,
+            editorialStatus: ContentEditorialStatus.IN_REVIEW,
+          },
+          data: { editorialStatus: next, version: { increment: 1 } },
+        });
+        if (changed.count !== 1) this.staleReview();
+        const item = await transaction.contentItem.findFirstOrThrow({
+          where: { id: contentId, workspaceId: workspace.id, websiteId },
+        });
+        const review = await transaction.contentReview.create({
+          data: {
+            workspaceId: workspace.id,
+            websiteId,
+            contentItemId: contentId,
+            contentRevisionId: reviewedRevision.id,
+            reviewerUserId: actor.userId,
+            decision,
+            note: normalizedNote,
+            reviewedRevisionNumber,
+          },
+        });
+        await this.createRevision(transaction, item, actor.userId, normalizedNote ?? undefined);
+        return { item, review };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async archive(
@@ -436,6 +520,10 @@ export class ContentsService {
     });
     if (!revision) this.notFound('Version introuvable.');
     return this.presentRevision(revision);
+  }
+
+  presentForReview(item: ContentItem): ContentItemSummary {
+    return this.present(item);
   }
 
   private async updateWithRevision(
@@ -799,6 +887,14 @@ export class ContentsService {
       HttpStatus.CONFLICT,
       ERROR_CODES.contentStaleUpdate,
       'Ce contenu a été modifié depuis son chargement. Rechargez la version actuelle.',
+    );
+  }
+
+  private staleReview(): never {
+    throw new CodedHttpException(
+      HttpStatus.CONFLICT,
+      ERROR_CODES.contentReviewStale,
+      'Le contenu a changé pendant la décision. Relisez la dernière version.',
     );
   }
 

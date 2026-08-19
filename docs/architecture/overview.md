@@ -39,3 +39,18 @@ Every accepted mutation creates an immutable `ContentRevision` in the same seria
 transaction. The browser provides French list, manual editor and revision-history views but does
 not render stored HTML as executable markup. Phase 3A has no queue, AI generation or provider
 publishing path.
+
+## Phase 3B review and draft handoff
+
+`ContentComment` stores bounded internal plain text and resolution history. `ContentReview` is an
+immutable decision linked by a composite foreign key to the exact `ContentRevision` reviewed. The
+existing editorial transition service performs the decision and status change in one serializable
+transaction; a stale revision cannot be approved.
+
+`ContentPublication` is the durable provider-neutral association between one content item and one
+provider/site draft. `ProviderPublication` remains the append-only operation/idempotency journal and
+optionally points to that association. The Content module resolves connection, external site and
+external post identifiers server-side, then calls the existing `PublishingProvider` abstraction.
+Internal edits only make the association out of sync; a separate human action updates the same
+Blogger Draft. Confirmed missing drafts are never recreated automatically, authorization failures
+never become deletion, and reconnecting the same site preserves the association.

@@ -353,6 +353,11 @@ describe('Phase 3A content API integration', () => {
       .post(`${base()}/${createdBody.id}/transition`)
       .set('Authorization', `Bearer ${reviewerToken}`)
       .send({ expectedVersion: 3, nextStatus: 'APPROVED', reason: 'Conforme' })
+      .expect(409);
+    await request(server)
+      .post(`${base()}/${createdBody.id}/reviews`)
+      .set('Authorization', `Bearer ${reviewerToken}`)
+      .send({ reviewedRevisionNumber: 3, decision: 'APPROVED', note: 'Conforme' })
       .expect(201);
   });
 });

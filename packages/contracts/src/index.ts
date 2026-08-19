@@ -65,6 +65,15 @@ export type Permission =
   | 'contents.archive'
   | 'contents.revisions.read'
   | 'contents.seo.update'
+  | 'contents.comments.read'
+  | 'contents.comments.create'
+  | 'contents.comments.resolve'
+  | 'contents.reviews.read'
+  | 'contents.reviews.approve'
+  | 'contents.reviews.requestChanges'
+  | 'contents.publication.read'
+  | 'contents.publication.createDraft'
+  | 'contents.publication.updateDraft'
   | 'integrations.read'
   | 'integrations.connect'
   | 'integrations.update'
@@ -244,6 +253,61 @@ export interface ContentRevisionSummary {
   changedByUserId: string;
   changeReason?: string;
   changedAt: string;
+}
+
+export type ContentCommentStatus = 'OPEN' | 'RESOLVED';
+
+export interface ContentCommentSummary {
+  id: string;
+  contentItemId: string;
+  authorUserId: string;
+  authorDisplayName?: string;
+  message: string;
+  status: ContentCommentStatus;
+  resolvedAt?: string;
+  resolvedByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ContentReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED';
+
+export interface ContentReviewSummary {
+  id: string;
+  contentItemId: string;
+  reviewerUserId: string;
+  reviewerDisplayName?: string;
+  decision: ContentReviewDecision;
+  note?: string;
+  reviewedRevisionNumber: number;
+  createdAt: string;
+}
+
+export type ReviewCenterQueue =
+  'TO_WRITE' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED' | 'READY_TO_PUBLISH';
+
+export interface ReviewCenterResponse extends PaginationResponse<ContentItemSummary> {
+  queueCounts: Record<ReviewCenterQueue, number>;
+}
+
+export type ContentPublicationSyncState =
+  'NOT_CONNECTED' | 'DRAFT_CREATED' | 'OUT_OF_SYNC' | 'SYNCHRONIZED' | 'ERROR' | 'MISSING';
+
+export interface ContentPublicationSummary {
+  contentItemId: string;
+  provider: 'BLOGGER';
+  connectionStatus?: IntegrationConnectionStatus;
+  externalSiteName?: string;
+  associationId?: string;
+  externalDraftExists: boolean;
+  bindingStatus?: 'PENDING' | 'ACTIVE' | 'MISSING' | 'ERROR';
+  synchronizedRevisionNumber?: number;
+  currentRevisionNumber: number;
+  synchronization: ContentPublicationSyncState;
+  lastErrorCode?: string;
+  publicPublishEnabled: boolean;
+  deleteEnabled: boolean;
+  updatedAt?: string;
 }
 
 export interface TemporaryPasswordResponse {

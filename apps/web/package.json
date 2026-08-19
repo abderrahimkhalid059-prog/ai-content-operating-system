@@ -8,7 +8,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:unit": "vitest run",
-    "test:integration": "vitest run test/system-status.spec.tsx test/blogger-ui.spec.tsx test/content-ui.spec.tsx"
+    "test:integration": "vitest run test/system-status.spec.tsx test/blogger-ui.spec.tsx test/content-ui.spec.tsx test/phase3b-review-ui.spec.tsx"
   },
   "dependencies": {
     "@ai-content-os/contracts": "*",

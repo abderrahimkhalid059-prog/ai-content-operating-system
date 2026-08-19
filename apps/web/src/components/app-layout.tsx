@@ -32,9 +32,14 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
               {activeWorkspaceId === selected &&
                 activeWebsiteId &&
                 auth.can('contents.read', selected) && (
-                  <NavLink to={`/espaces/${selected}/sites/${activeWebsiteId}/contenus`}>
-                    Contenus
-                  </NavLink>
+                  <>
+                    <NavLink to={`/espaces/${selected}/sites/${activeWebsiteId}/contenus`}>
+                      Contenus
+                    </NavLink>
+                    <NavLink to={`/espaces/${selected}/sites/${activeWebsiteId}/centre-revision`}>
+                      Centre de révision
+                    </NavLink>
+                  </>
                 )}
             </>
           )}
@@ -43,7 +48,7 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
           <NavLink to="/securite/sessions">Sessions</NavLink>
           <NavLink to="/systeme">Système</NavLink>
         </nav>
-        <div className="sidebar-note">Identité, multi-site, Blogger & contenus · Phase 3A</div>
+        <div className="sidebar-note">Révision humaine & brouillons Blogger · Phase 3B</div>
       </aside>
       <div className="main-column">
         <header className="topbar">

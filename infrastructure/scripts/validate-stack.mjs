@@ -313,6 +313,105 @@ const importedLabels = await request(`${bloggerBase}/external-labels`, {
   headers: authorization,
 });
 assert.ok(importedLabels.length > 1);
+
+const phase3bContentBase = `${bloggerBase}/contents`;
+const phase3bContent = await request(phase3bContentBase, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Validation full-stack Phase 3B',
+    slug: `phase-3b-${validationSuffix}`,
+    excerpt: 'Contenu contrôlé par le Centre de révision.',
+    htmlContent: '<h1>Phase 3B</h1><p>Brouillon provider-neutral sûr.</p>',
+    language: 'fr',
+    labels: ['Validation', 'Phase 3B'],
+    editorialStatus: 'DRAFT',
+  }),
+});
+const comment = await request(`${phase3bContentBase}/${phase3bContent.id}/comments`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({ message: 'Commentaire interne de validation.' }),
+});
+assert.equal(comment.status, 'OPEN');
+const resolvedComment = await request(
+  `${phase3bContentBase}/${phase3bContent.id}/comments/${comment.id}/resolve`,
+  { method: 'POST', headers: authorization },
+);
+assert.equal(resolvedComment.status, 'RESOLVED');
+const submittedForReview = await request(`${phase3bContentBase}/${phase3bContent.id}/transition`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({ expectedVersion: phase3bContent.version, nextStatus: 'IN_REVIEW' }),
+});
+const approval = await request(`${phase3bContentBase}/${phase3bContent.id}/reviews`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    reviewedRevisionNumber: submittedForReview.version,
+    decision: 'APPROVED',
+    note: 'Version relue manuellement.',
+  }),
+});
+assert.equal(approval.reviewedRevisionNumber, submittedForReview.version);
+const approvedContent = await request(`${phase3bContentBase}/${phase3bContent.id}`, {
+  headers: authorization,
+});
+const readyContent = await request(`${phase3bContentBase}/${phase3bContent.id}/transition`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    expectedVersion: approvedContent.version,
+    nextStatus: 'READY_TO_PUBLISH',
+  }),
+});
+const reviewCenter = await request(
+  `${bloggerBase}/review-center?queue=READY_TO_PUBLISH&search=Phase%203B`,
+  { headers: authorization },
+);
+assert.ok(reviewCenter.data.some((entry) => entry.id === readyContent.id));
+const contentPublication = await request(
+  `${phase3bContentBase}/${readyContent.id}/publication/blogger/draft`,
+  {
+    method: 'POST',
+    headers: { ...authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      expectedRevision: readyContent.version,
+      idempotencyKey: `stack-content-create-${validationSuffix}`,
+    }),
+  },
+);
+assert.equal(contentPublication.synchronization, 'SYNCHRONIZED');
+assert.equal(contentPublication.externalDraftExists, true);
+assert.equal(contentPublication.publicPublishEnabled, false);
+assert.equal(contentPublication.externalPostId, undefined);
+const revisedInternalContent = await request(`${phase3bContentBase}/${readyContent.id}`, {
+  method: 'PATCH',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    expectedVersion: readyContent.version,
+    title: 'Validation full-stack Phase 3B — révisée',
+    changeReason: 'Vérification de la désynchronisation explicite',
+  }),
+});
+const outOfSync = await request(`${phase3bContentBase}/${readyContent.id}/publication`, {
+  headers: authorization,
+});
+assert.equal(outOfSync.synchronization, 'OUT_OF_SYNC');
+const synchronizedAgain = await request(
+  `${phase3bContentBase}/${readyContent.id}/publication/blogger/draft`,
+  {
+    method: 'PATCH',
+    headers: { ...authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      expectedRevision: revisedInternalContent.version,
+      idempotencyKey: `stack-content-update-${validationSuffix}`,
+    }),
+  },
+);
+assert.equal(synchronizedAgain.synchronization, 'SYNCHRONIZED');
+assert.equal(synchronizedAgain.associationId, contentPublication.associationId);
+
 const draftPayload = {
   title: 'Validation full-stack Blogger',
   htmlContent: '<p>Brouillon Mock de validation.</p>',
@@ -378,5 +477,5 @@ await request(`${apiUrl}/auth/logout`, {
 });
 
 console.log(
-  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Mock Blogger OAuth/discovery/selection/sync/import/labels/draft idempotency/safety/disconnect.',
+  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Phase 3B review/comments/queues/provider-neutral Blogger Draft create/update/idempotency/synchronization, and Mock Blogger OAuth/discovery/selection/sync/import/labels/safety/disconnect.',
 );

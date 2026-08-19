@@ -10,6 +10,7 @@ import {
   ContentListPage,
   ContentRevisionsPage,
 } from './pages/contents/content-ui';
+import { ReviewCenterPage } from './pages/contents/review-center';
 import { DashboardPage } from './pages/dashboard';
 import { ForbiddenPage } from './pages/forbidden';
 import { LoginPage } from './pages/auth/login';
@@ -86,6 +87,11 @@ export function App(): React.JSX.Element {
                       <Route exact path="/espaces/:workspaceId/sites/:websiteId/contenus">
                         <PermissionRoute permission="contents.read">
                           <ContentListPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route exact path="/espaces/:workspaceId/sites/:websiteId/centre-revision">
+                        <PermissionRoute permission="contents.read">
+                          <ReviewCenterPage />
                         </PermissionRoute>
                       </Route>
                       <Route exact path="/espaces/:workspaceId/sites/:websiteId/contenus/nouveau">

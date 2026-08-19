@@ -61,6 +61,19 @@ describe('Interface de contenu Phase 3A', () => {
     mocks.apiRequest.mockReset();
     mocks.can.mockReturnValue(true);
     mocks.apiRequest.mockImplementation((path: string) => {
+      if (path.endsWith('/comments') || path.endsWith('/reviews')) return Promise.resolve([]);
+      if (path.endsWith('/publication')) {
+        return Promise.resolve({
+          contentItemId: 'c1',
+          provider: 'BLOGGER',
+          connectionStatus: 'CONNECTED',
+          externalDraftExists: false,
+          currentRevisionNumber: 2,
+          synchronization: 'NOT_CONNECTED',
+          publicPublishEnabled: false,
+          deleteEnabled: false,
+        });
+      }
       if (path.includes('/content-profiles')) return Promise.resolve([]);
       if (path.endsWith('/members')) return Promise.resolve([]);
       if (path.endsWith('/revisions')) {
@@ -121,7 +134,7 @@ describe('Interface de contenu Phase 3A', () => {
       '/espaces/:workspaceId/sites/:websiteId/contenus/:contentId',
     );
     expect(await screen.findByDisplayValue('Guide éditorial')).toBeInTheDocument();
-    expect(screen.getAllByText('Version 2')).toHaveLength(2);
+    expect(screen.getAllByText('Version 2')).toHaveLength(4);
     expect(screen.getByRole('link', { name: 'Historique des versions' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Contenu HTML'), {
       target: { value: '<p>Un deux trois quatre cinq.</p>' },
@@ -131,6 +144,19 @@ describe('Interface de contenu Phase 3A', () => {
 
   it('sends expectedVersion and displays a safe stale-update recovery', async () => {
     mocks.apiRequest.mockImplementation((path: string, init?: RequestInit) => {
+      if (path.endsWith('/comments') || path.endsWith('/reviews')) return Promise.resolve([]);
+      if (path.endsWith('/publication')) {
+        return Promise.resolve({
+          contentItemId: 'c1',
+          provider: 'BLOGGER',
+          connectionStatus: 'CONNECTED',
+          externalDraftExists: false,
+          currentRevisionNumber: 2,
+          synchronization: 'NOT_CONNECTED',
+          publicPublishEnabled: false,
+          deleteEnabled: false,
+        });
+      }
       if (path.includes('/content-profiles') || path.endsWith('/members'))
         return Promise.resolve([]);
       if (path.endsWith('/c1') && init?.method === 'PATCH') {

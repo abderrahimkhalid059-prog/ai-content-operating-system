@@ -1,8 +1,8 @@
 # AI Content Operating System
 
-Production-oriented Phase 3A foundation for a content operations SaaS. It preserves the validated
-identity, multi-website and Blogger layers and adds a provider-neutral content domain, immutable
-revisions and a secure French manual editor.
+Production-oriented Phase 3B foundation for a content operations SaaS. It preserves the validated
+identity, multi-website, Blogger and manual-content layers and adds a human Review Center,
+revision-bound decisions and a controlled provider-neutral Blogger Draft handoff.
 
 ## Architecture
 
@@ -46,8 +46,10 @@ requires Google OAuth values and an AES-256-GCM key. Public publish and delete d
 See [Blogger API](docs/api/blogger.md) and the
 [future Live checklist](docs/integrations/blogger-live-validation.md).
 
-The content API is documented in [docs/api/contents.md](docs/api/contents.md). Phase 3A content is
-independent of Blogger: saving or transitioning an editorial record never publishes externally.
+The content API is documented in [docs/api/contents.md](docs/api/contents.md). Saving content never
+updates Blogger automatically. Only an explicit action on a `READY_TO_PUBLISH` item creates or
+updates its linked unpublished draft; public publication and external deletion remain unavailable
+from the Phase 3B workflow.
 
 ## Commands
 
@@ -83,13 +85,13 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 3A scope
+## Phase 3B scope
 
-Implemented: all validated Phase 0–2 behavior plus tenant-scoped manual content CRUD, editorial
-workflow, separate publication state, HTML safety, normalized slugs/labels, calculated metrics,
-assignment, content-profile association, optimistic concurrency, immutable revisions, audit and a
-French list/editor/history interface.
+Implemented: all validated Phase 0–3A behavior plus review queues, internal comments, immutable
+revision-bound decisions, granular review/publication RBAC, durable provider-neutral publication
+bindings, idempotent Blogger Draft create/update, synchronization recovery and a French Review
+Center integrated into the manual editor.
 
-Not implemented: Phase 3B, AI/content generation, research, fact verification, SEO engines, image
-generation, automatic or scheduled publishing, WordPress, affiliates, analytics or billing.
+Not implemented: AI/content generation, research, fact verification, SEO engines, image generation,
+automatic or scheduled public publishing, WordPress, affiliates, analytics or billing.
 Development fixtures are not production credentials or content.

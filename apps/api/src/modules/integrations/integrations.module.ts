@@ -18,6 +18,6 @@ import {
     BloggerSyncService,
     BloggerPublicationService,
   ],
-  exports: [BloggerProviderFactory],
+  exports: [BloggerProviderFactory, BloggerConnectionsService],
 })
 export class IntegrationsModule {}

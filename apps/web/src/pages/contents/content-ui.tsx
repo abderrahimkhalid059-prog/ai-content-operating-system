@@ -13,6 +13,7 @@ import { Link, useHistory, useParams } from 'react-router-dom';
 import { apiRequest, ApiClientError } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
 import { Loading } from '../../components/loading';
+import { ContentReviewPanel } from './content-review-panel';
 
 const editorialStatuses: ContentEditorialStatus[] = [
   'IDEA',
@@ -38,7 +39,7 @@ const nextStatuses: Partial<Record<ContentEditorialStatus, ContentEditorialStatu
   RESEARCHING: ['OUTLINED', 'DRAFT'],
   OUTLINED: ['DRAFT'],
   DRAFT: ['IN_REVIEW'],
-  IN_REVIEW: ['CHANGES_REQUESTED', 'APPROVED'],
+  IN_REVIEW: [],
   CHANGES_REQUESTED: ['DRAFT'],
   APPROVED: ['READY_TO_PUBLISH'],
   READY_TO_PUBLISH: ['PUBLISHED'],
@@ -337,6 +338,10 @@ export function ContentEditorPage(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: ['content', workspaceId, websiteId, id] }),
       queryClient.invalidateQueries({
         queryKey: ['content-revisions', workspaceId, websiteId, id],
+      }),
+      queryClient.invalidateQueries({ queryKey: ['review-center', workspaceId, websiteId] }),
+      queryClient.invalidateQueries({
+        queryKey: ['content-publication', workspaceId, websiteId, id],
       }),
     ]);
   };
@@ -681,6 +686,9 @@ export function ContentEditorPage(): React.JSX.Element {
           </div>
         </aside>
       </form>
+      {persisted && (
+        <ContentReviewPanel workspaceId={workspaceId} websiteId={websiteId} item={persisted} />
+      )}
     </section>
   );
 }

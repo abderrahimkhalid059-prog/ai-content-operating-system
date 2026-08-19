@@ -34,4 +34,15 @@ describe('fixed workspace permissions', () => {
     expect(permissionsForRole('VIEWER')).toContain('contents.revisions.read');
     expect(permissionsForRole('VIEWER')).not.toContain('contents.create');
   });
+
+  it('applies granular Phase 3B review and draft-handoff permissions', () => {
+    expect(permissionsForRole('EDITOR')).toContain('contents.publication.createDraft');
+    expect(permissionsForRole('REVIEWER')).toContain('contents.reviews.approve');
+    expect(permissionsForRole('REVIEWER')).toContain('contents.comments.resolve');
+    expect(permissionsForRole('WRITER')).toContain('contents.comments.create');
+    expect(permissionsForRole('WRITER')).not.toContain('contents.reviews.approve');
+    expect(permissionsForRole('SEO_MANAGER')).not.toContain('contents.publication.createDraft');
+    expect(permissionsForRole('VIEWER')).toContain('contents.publication.read');
+    expect(permissionsForRole('VIEWER')).not.toContain('contents.comments.create');
+  });
 });

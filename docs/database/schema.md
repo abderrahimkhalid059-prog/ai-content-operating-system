@@ -41,3 +41,17 @@ publication statuses use separate PostgreSQL enums.
 Metrics have non-negative checks, revisions have a positive-number check, and indexes cover the
 site/status chronology, publication state, assignee, creator, profile and revision history. Content
 archival is logical and content deletion is not exposed by the Phase 3A API.
+
+# Phase 3B review and publication records
+
+Migration `20260819120000_phase_3b_review_center_handoff` is additive. `content_comments` stores
+bounded plain text, author, state and resolver without provider payloads. `content_reviews` stores
+immutable `APPROVED` or `CHANGES_REQUESTED` decisions and references the exact content revision
+through workspace/site/content-scoped composite keys. A database check requires a note for change
+requests.
+
+`content_publications` binds `(content_item, provider, external_site)` uniquely, stores the current
+connection and provider post as strings, the last synchronized internal revision/hash and a safe
+`PENDING`/`ACTIVE`/`MISSING`/`ERROR` lifecycle. The existing `provider_publications` operation journal
+gains an optional binding foreign key and binding-scoped idempotency uniqueness. Reconnection may
+change the connection row while preserving the content publication association and external post.

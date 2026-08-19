@@ -633,6 +633,7 @@ export class BloggerPublicationService {
         workspaceId: connection.workspaceId,
         websiteId: connection.websiteId,
         connectionId: { in: connectionIds },
+        contentPublicationId: null,
         provider: PublishingProviderType.BLOGGER,
         operationType: {
           in: [

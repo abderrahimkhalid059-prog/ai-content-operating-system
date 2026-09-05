@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ContentProfileSummary } from '@ai-content-os/contracts';
-import { useState } from 'react';
+import type { ContentProfileSummary, WebsiteSummary } from '@ai-content-os/contracts';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiRequest } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
@@ -15,12 +15,33 @@ export function ContentProfilesPage(): React.JSX.Element {
   const client = useQueryClient();
   const [name, setName] = useState('');
   const [tone, setTone] = useState('');
+  const [language, setLanguage] = useState('');
+  const [locale, setLocale] = useState('');
+  const [countryCode, setCountryCode] = useState('');
   const [rules, setRules] = useState('{"attributionRequired":true}');
-  const base = `/workspaces/${workspaceId}/websites/${websiteId}/content-profiles`;
+  const websiteBase = `/workspaces/${workspaceId}/websites/${websiteId}`;
+  const base = `${websiteBase}/content-profiles`;
+  const website = useQuery({
+    queryKey: ['website', workspaceId, websiteId],
+    queryFn: () => apiRequest<WebsiteSummary>(websiteBase),
+  });
   const profiles = useQuery({
     queryKey: ['profiles', workspaceId, websiteId],
     queryFn: () => apiRequest<ContentProfileSummary[]>(base),
   });
+  useEffect(() => {
+    if (!website.data) return;
+    setLanguage((current) => current || website.data.language);
+    setLocale((current) => current || website.data.locale || '');
+    setCountryCode((current) => {
+      if (current) return current;
+      const region = website.data.locale
+        ?.split('-')
+        .slice(1)
+        .find((part) => /^[a-z]{2}$/i.test(part));
+      return region?.toUpperCase() ?? '';
+    });
+  }, [website.data]);
   const invalidate = () =>
     client.invalidateQueries({ queryKey: ['profiles', workspaceId, websiteId] });
   const create = useMutation({
@@ -29,9 +50,9 @@ export function ContentProfilesPage(): React.JSX.Element {
         method: 'POST',
         body: JSON.stringify({
           name,
-          language: 'ar',
-          locale: 'ar-MA',
-          countryCode: 'MA',
+          language: language.trim().toLowerCase(),
+          ...(locale.trim() ? { locale: locale.trim() } : {}),
+          ...(countryCode.trim() ? { countryCode: countryCode.trim().toUpperCase() } : {}),
           tone,
           editorialRules: JSON.parse(rules) as unknown,
           prohibitedTopics: [],
@@ -75,6 +96,34 @@ export function ContentProfilesPage(): React.JSX.Element {
           <label>
             Ton
             <input value={tone} onChange={(event) => setTone(event.target.value)} required />
+          </label>
+          <label>
+            Langue
+            <input
+              value={language}
+              onChange={(event) => setLanguage(event.target.value)}
+              placeholder="fr, ar, en…"
+              pattern="[A-Za-z]{2,3}"
+              required
+            />
+          </label>
+          <label>
+            Locale
+            <input
+              value={locale}
+              onChange={(event) => setLocale(event.target.value)}
+              placeholder="fr-FR, ar-MA, en-US…"
+            />
+          </label>
+          <label>
+            Pays (ISO 3166-1 alpha-2)
+            <input
+              value={countryCode}
+              onChange={(event) => setCountryCode(event.target.value)}
+              placeholder="FR, MA, US…"
+              pattern="[A-Za-z]{2}"
+              maxLength={2}
+            />
           </label>
           <label className="span-two">
             Règles JSON

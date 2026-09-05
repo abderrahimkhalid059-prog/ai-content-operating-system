@@ -20,6 +20,15 @@ const schema = z.object({
 });
 type WebsiteFormValues = z.infer<typeof schema>;
 
+function detectedWebsiteDefaults(): Pick<WebsiteFormValues, 'language' | 'locale' | 'timezone'> {
+  const locale = globalThis.navigator?.language || 'en-US';
+  return {
+    language: locale.split('-')[0]?.toLowerCase() || 'en',
+    locale,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  };
+}
+
 export function WebsiteFormPage(): React.JSX.Element {
   const { workspaceId = '', websiteId } = useParams<{
     workspaceId?: string;
@@ -33,13 +42,13 @@ export function WebsiteFormPage(): React.JSX.Element {
     queryFn: () => apiRequest<WebsiteSummary>(`/workspaces/${workspaceId}/websites/${websiteId}`),
     enabled: editing,
   });
+  const detectedDefaults = detectedWebsiteDefaults();
   const form = useForm<WebsiteFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       platform: 'OTHER' as WebsitePlatform,
       status: 'DRAFT' as WebsiteStatus,
-      language: 'fr',
-      timezone: 'Africa/Casablanca',
+      ...detectedDefaults,
     },
   });
   useEffect(() => {
@@ -140,7 +149,7 @@ export function WebsiteFormPage(): React.JSX.Element {
         </label>
         <label>
           Locale
-          <input {...form.register('locale')} placeholder="ar-MA" />
+          <input {...form.register('locale')} placeholder="fr-FR, ar-MA, en-US…" />
         </label>
         <label>
           Fuseau horaire

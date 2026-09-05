@@ -76,6 +76,21 @@ describe('Interface de contenu Phase 3A', () => {
       }
       if (path.includes('/content-profiles')) return Promise.resolve([]);
       if (path.endsWith('/members')) return Promise.resolve([]);
+      if (path.endsWith('/websites/s1')) {
+        return Promise.resolve({
+          id: 's1',
+          workspaceId: 'w1',
+          name: 'Tech Deutschland',
+          slug: 'tech-deutschland',
+          platform: 'OTHER',
+          language: 'de',
+          locale: 'de-DE',
+          timezone: 'Europe/Berlin',
+          status: 'ACTIVE',
+          createdAt: '',
+          updatedAt: '',
+        });
+      }
       if (path.endsWith('/revisions')) {
         return Promise.resolve([
           {
@@ -140,6 +155,16 @@ describe('Interface de contenu Phase 3A', () => {
       target: { value: '<p>Un deux trois quatre cinq.</p>' },
     });
     expect(screen.getByText(/Estimation locale : 5 mots/)).toBeInTheDocument();
+  });
+
+  it('uses the selected website localization for a new content item', async () => {
+    renderAt(
+      <ContentEditorPage />,
+      '/espaces/w1/sites/s1/contenus/nouveau',
+      '/espaces/:workspaceId/sites/:websiteId/contenus/nouveau',
+    );
+    await waitFor(() => expect(screen.getByLabelText('Langue')).toHaveValue('de'));
+    expect(screen.getByLabelText('Locale')).toHaveValue('de-DE');
   });
 
   it('sends expectedVersion and displays a safe stale-update recovery', async () => {

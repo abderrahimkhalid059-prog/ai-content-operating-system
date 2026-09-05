@@ -6,9 +6,10 @@ import type {
   ContentPublicationStatus,
   ContentRevisionSummary,
   PaginationResponse,
+  WebsiteSummary,
   WorkspaceMemberSummary,
 } from '@ai-content-os/contracts';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useHistory, useParams } from 'react-router-dom';
 import { apiRequest, ApiClientError } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
@@ -263,8 +264,8 @@ const emptyForm: ContentFormState = {
   metaTitle: '',
   metaDescription: '',
   canonicalUrl: '',
-  language: 'fr',
-  locale: 'fr-FR',
+  language: '',
+  locale: '',
   featuredImageReference: '',
   labels: '',
   contentProfileId: '',
@@ -302,10 +303,16 @@ export function ContentEditorPage(): React.JSX.Element {
   const base = contentBase(workspaceId, websiteId);
   const [form, setForm] = useState<ContentFormState>(emptyForm);
   const [notice, setNotice] = useState<string>();
+  const websiteDefaultsApplied = useRef(false);
   const item = useQuery({
     queryKey: ['content', workspaceId, websiteId, contentId],
     queryFn: () => apiRequest<ContentItemSummary>(`${base}/${contentId}`),
     enabled: editing,
+  });
+  const website = useQuery({
+    queryKey: ['website', workspaceId, websiteId],
+    queryFn: () => apiRequest<WebsiteSummary>(`/workspaces/${workspaceId}/websites/${websiteId}`),
+    enabled: !editing,
   });
   const profiles = useQuery({
     queryKey: ['profiles', workspaceId, websiteId],
@@ -322,6 +329,15 @@ export function ContentEditorPage(): React.JSX.Element {
   useEffect(() => {
     if (item.data) setForm(hydrateForm(item.data));
   }, [item.data]);
+  useEffect(() => {
+    if (editing || !website.data || websiteDefaultsApplied.current) return;
+    websiteDefaultsApplied.current = true;
+    setForm((current) => ({
+      ...current,
+      language: website.data.language,
+      locale: website.data.locale ?? '',
+    }));
+  }, [editing, website.data]);
   const set = (field: keyof ContentFormState, value: string): void =>
     setForm((current) => ({ ...current, [field]: value }));
   const metrics = useMemo(() => {

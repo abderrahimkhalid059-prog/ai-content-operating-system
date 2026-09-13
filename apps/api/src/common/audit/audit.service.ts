@@ -23,7 +23,10 @@ export class AuditService {
   async record(input: AuditInput, request?: AuthenticatedRequest): Promise<void> {
     const metadata: Record<string, string | number | boolean | null> = {};
     for (const [key, value] of Object.entries(input.metadata ?? {})) {
-      if (value === undefined || /password|token|cookie|authorization|secret|hash/i.test(key))
+      if (
+        value === undefined ||
+        /password|token|cookie|authorization|secret|hash|credential/i.test(key)
+      )
         continue;
       metadata[key] = typeof value === 'string' ? value.slice(0, 500) : value;
     }

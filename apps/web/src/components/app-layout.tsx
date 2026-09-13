@@ -29,6 +29,9 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
             <>
               <NavLink to={`/espaces/${selected}/membres`}>Membres</NavLink>
               <NavLink to={`/espaces/${selected}/sites`}>Sites</NavLink>
+              {auth.can('ai.config.read', selected) && (
+                <NavLink to={`/espaces/${selected}/ia`}>Infrastructure IA</NavLink>
+              )}
               {activeWorkspaceId === selected &&
                 activeWebsiteId &&
                 auth.can('contents.read', selected) && (
@@ -48,7 +51,7 @@ export function AppLayout({ children }: { children: ReactNode }): React.JSX.Elem
           <NavLink to="/securite/sessions">Sessions</NavLink>
           <NavLink to="/systeme">Système</NavLink>
         </nav>
-        <div className="sidebar-note">Révision humaine & brouillons Blogger · Phase 3B</div>
+        <div className="sidebar-note">Infrastructure IA contrôlée · Phase 4A</div>
       </aside>
       <div className="main-column">
         <header className="topbar">

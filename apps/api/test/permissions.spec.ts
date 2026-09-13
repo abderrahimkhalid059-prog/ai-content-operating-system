@@ -45,4 +45,13 @@ describe('fixed workspace permissions', () => {
     expect(permissionsForRole('VIEWER')).toContain('contents.publication.read');
     expect(permissionsForRole('VIEWER')).not.toContain('contents.comments.create');
   });
+
+  it('applies least-privilege Phase 4A AI administration permissions', () => {
+    expect(permissionsForRole('OWNER')).toContain('ai.config.update');
+    expect(permissionsForRole('ADMIN')).toContain('ai.config.test');
+    expect(permissionsForRole('EDITOR')).toContain('ai.config.test');
+    expect(permissionsForRole('EDITOR')).not.toContain('ai.config.update');
+    expect(permissionsForRole('VIEWER')).toContain('ai.runs.read');
+    expect(permissionsForRole('VIEWER')).not.toContain('ai.config.test');
+  });
 });

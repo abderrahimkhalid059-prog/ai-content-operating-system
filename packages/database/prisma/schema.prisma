@@ -144,6 +144,28 @@ enum ContentPublicationBindingStatus {
   ERROR
 }
 
+enum AiConfigurationScope {
+  WORKSPACE
+  WEBSITE
+  CONTENT_PROFILE
+}
+
+enum AiRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AiErrorCategory {
+  AUTHENTICATION
+  RATE_LIMIT
+  INVALID_REQUEST
+  TIMEOUT
+  UNAVAILABLE
+  MALFORMED_RESPONSE
+  UNKNOWN
+}
+
 model User {
   id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                String              @unique @db.VarChar(320)
@@ -191,6 +213,8 @@ model Workspace {
   contentComments     ContentComment[]
   contentReviews      ContentReview[]
   contentPublications ContentPublication[]
+  aiConfigurations    AiConfiguration[]
+  aiRuns              AiRun[]
 
   @@map("workspaces")
 }
@@ -235,6 +259,8 @@ model Website {
   contentComments     ContentComment[]
   contentReviews      ContentReview[]
   contentPublications ContentPublication[]
+  aiConfigurations    AiConfiguration[]
+  aiRuns              AiRun[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
@@ -320,6 +346,8 @@ model ContentProfile {
   updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
   website          Website              @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   contentItems     ContentItem[]
+  aiConfigurations AiConfiguration[]
+  aiRuns           AiRun[]
 
   @@unique([websiteId, name])
   @@unique([id, workspaceId, websiteId])
@@ -674,4 +702,75 @@ model ProviderPublication {
   @@index([workspaceId, websiteId, status])
   @@index([connectionId, externalPostId])
   @@map("provider_publications")
+}
+
+model AiConfiguration {
+  id                         String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId                String               @map("workspace_id") @db.Uuid
+  websiteId                  String?              @map("website_id") @db.Uuid
+  contentProfileId           String?              @map("content_profile_id") @db.Uuid
+  scope                      AiConfigurationScope
+  scopeKey                   String               @map("scope_key") @db.Uuid
+  providerKey                String               @map("provider_key") @db.VarChar(80)
+  model                      String               @db.VarChar(160)
+  encryptedCredentials       String?              @map("encrypted_credentials") @db.Text
+  credentialKeyVersion       String?              @map("credential_key_version") @db.VarChar(50)
+  credentialHint             String?              @map("credential_hint") @db.VarChar(32)
+  timeoutMs                  Int                  @default(10000) @map("timeout_ms")
+  maxRetries                 Int                  @default(2) @map("max_retries")
+  temperature                Float?               @db.Real
+  maxOutputTokens            Int?                 @map("max_output_tokens")
+  monthlyTokenLimit          Int?                 @map("monthly_token_limit")
+  pricingCurrency            String?              @map("pricing_currency") @db.Char(3)
+  inputCostPerMillionMicros  Int?                 @map("input_cost_per_million_micros")
+  outputCostPerMillionMicros Int?                 @map("output_cost_per_million_micros")
+  isEnabled                  Boolean              @default(true) @map("is_enabled")
+  createdAt                  DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace                  Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website                    Website?             @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentProfile             ContentProfile?      @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  runs                       AiRun[]
+
+  @@unique([id, workspaceId])
+  @@unique([workspaceId, scope, scopeKey])
+  @@index([workspaceId, websiteId, contentProfileId, isEnabled])
+  @@map("ai_configurations")
+}
+
+model AiRun {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId         String           @map("workspace_id") @db.Uuid
+  websiteId           String?          @map("website_id") @db.Uuid
+  contentProfileId    String?          @map("content_profile_id") @db.Uuid
+  configurationId     String?          @map("configuration_id") @db.Uuid
+  idempotencyKey      String           @map("idempotency_key") @db.VarChar(160)
+  providerKey         String           @map("provider_key") @db.VarChar(80)
+  model               String           @db.VarChar(160)
+  operation           String           @db.VarChar(120)
+  promptIdentifier    String           @map("prompt_identifier") @db.VarChar(120)
+  promptVersion       Int              @map("prompt_version")
+  correlationId       String           @map("correlation_id") @db.VarChar(128)
+  status              AiRunStatus      @default(RUNNING)
+  startedAt           DateTime         @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt         DateTime?        @map("completed_at") @db.Timestamptz(3)
+  latencyMs           Int?             @map("latency_ms")
+  retryCount          Int              @default(0) @map("retry_count")
+  inputTokens         Int?             @map("input_tokens")
+  outputTokens        Int?             @map("output_tokens")
+  totalTokens         Int?             @map("total_tokens")
+  estimatedCostMicros Int?             @map("estimated_cost_micros")
+  costCurrency        String?          @map("cost_currency") @db.Char(3)
+  errorCategory       AiErrorCategory? @map("error_category")
+  errorCode           String?          @map("error_code") @db.VarChar(120)
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website             Website?         @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentProfile      ContentProfile?  @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  configuration       AiConfiguration? @relation(fields: [configurationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, startedAt])
+  @@index([workspaceId, websiteId, contentProfileId, startedAt])
+  @@index([status, startedAt])
+  @@map("ai_runs")
 }

@@ -6,6 +6,16 @@ AI Content OS is a modular monolith in one npm-workspaces repository. Modules sh
 
 The NestJS API owns synchronous REST entry points and infrastructure orchestration. The React/Vite application is an API consumer and never connects directly to infrastructure. The worker owns asynchronous BullMQ execution and exposes no public network interface. Shared packages contain only framework-neutral contracts or infrastructure clients.
 
+## Phase 4A AI boundary
+
+`packages/integrations` owns the provider contract and registry, deterministic mock, prompt
+registry, structured-output validation and bounded executor. NestJS `AiModule` owns scoped
+configuration, credential decryption, authorization, audits and metadata-only `AiRun` persistence.
+Content modules have no vendor SDK or AI-module dependency in this phase.
+
+Future asynchronous generation can enqueue a provider-neutral command and reuse this resolver and
+executor in the worker. No AI generation queue or content mutation exists in Phase 4A.
+
 ## State and processing
 
 PostgreSQL is the source of truth for durable workspace, website, audit, setting, and job metadata. Redis is not authoritative; it provides BullMQ queue state and temporary processing coordination. Queue payloads carry correlation IDs so API requests, queue events, and worker logs can be traced together.

@@ -71,6 +71,11 @@ export const ERROR_CODES = {
   bloggerDeleteDisabled: 'BLOGGER_DELETE_DISABLED',
   bloggerInvalidHtml: 'BLOGGER_INVALID_HTML',
   bloggerSyncAlreadyRunning: 'BLOGGER_SYNC_ALREADY_RUNNING',
+  aiConfigurationNotFound: 'AI_CONFIGURATION_NOT_FOUND',
+  aiConfigurationInvalid: 'AI_CONFIGURATION_INVALID',
+  aiCredentialUnavailable: 'AI_CREDENTIAL_UNAVAILABLE',
+  aiMonthlyLimitReached: 'AI_MONTHLY_LIMIT_REACHED',
+  aiProviderFailed: 'AI_PROVIDER_FAILED',
 } as const;
 
 export type CorrelationId = string;

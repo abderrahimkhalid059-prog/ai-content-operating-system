@@ -86,6 +86,10 @@ export type Permission =
   | 'providerPublishing.update'
   | 'providerPublishing.publish'
   | 'providerPublishing.delete'
+  | 'ai.config.read'
+  | 'ai.config.update'
+  | 'ai.config.test'
+  | 'ai.runs.read'
   | 'audit.read';
 
 export interface SafeUserSummary {
@@ -623,4 +627,128 @@ export interface BloggerSyncJobResult {
   itemsUpdated: number;
   itemsFailed: number;
   errorCode?: string;
+}
+
+export type AiConfigurationScope = 'WORKSPACE' | 'WEBSITE' | 'CONTENT_PROFILE';
+export type AiOutputFormat = 'TEXT' | 'JSON';
+export type AiMessageRole = 'USER' | 'ASSISTANT';
+export type AiRunStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type AiErrorCategory =
+  | 'AUTHENTICATION'
+  | 'RATE_LIMIT'
+  | 'INVALID_REQUEST'
+  | 'TIMEOUT'
+  | 'UNAVAILABLE'
+  | 'MALFORMED_RESPONSE'
+  | 'UNKNOWN';
+
+export interface AiMessage {
+  role: AiMessageRole;
+  content: string;
+}
+
+export interface AiGenerationParameters {
+  temperature?: number;
+  maxOutputTokens?: number;
+}
+
+export interface AiGenerationRequest {
+  model: string;
+  systemInstructions?: string;
+  messages: AiMessage[];
+  outputFormat: AiOutputFormat;
+  parameters?: AiGenerationParameters;
+  signal?: {
+    readonly aborted: boolean;
+    addEventListener(type: 'abort', listener: () => void, options?: { once?: boolean }): void;
+  };
+}
+
+export interface AiUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface AiGenerationResult {
+  text: string;
+  usage?: AiUsage;
+  providerRequestId?: string;
+}
+
+export interface AiProviderContext {
+  credential?: string;
+  correlationId?: string;
+}
+
+export interface AiProvider {
+  readonly key: string;
+  readonly displayName: string;
+  readonly requiresCredentials: boolean;
+  generate(request: AiGenerationRequest, context?: AiProviderContext): Promise<AiGenerationResult>;
+}
+
+export interface AiProviderDescriptor {
+  key: string;
+  displayName: string;
+  requiresCredentials: boolean;
+}
+
+export interface AiConfigurationSummary {
+  id?: string;
+  workspaceId: string;
+  scope: AiConfigurationScope;
+  websiteId?: string;
+  contentProfileId?: string;
+  providerKey: string;
+  model: string;
+  isEnabled: boolean;
+  hasCredential: boolean;
+  credentialHint?: string;
+  timeoutMs: number;
+  maxRetries: number;
+  temperature?: number;
+  maxOutputTokens?: number;
+  monthlyTokenLimit?: number;
+  pricing?: {
+    currency: string;
+    inputMicrosPerMillionTokens: number;
+    outputMicrosPerMillionTokens: number;
+  };
+  source: AiConfigurationScope | 'SYSTEM';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiRunSummary {
+  id: string;
+  workspaceId: string;
+  websiteId?: string;
+  contentProfileId?: string;
+  configurationId?: string;
+  providerKey: string;
+  model: string;
+  operation: string;
+  promptIdentifier: string;
+  promptVersion: number;
+  correlationId: string;
+  status: AiRunStatus;
+  startedAt: string;
+  completedAt?: string;
+  latencyMs?: number;
+  retryCount: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  estimatedCostMicros?: number;
+  costCurrency?: string;
+  errorCategory?: AiErrorCategory;
+  errorCode?: string;
+}
+
+export type ResolvedAiConfiguration = AiConfigurationSummary;
+
+export interface AiProviderTestResult {
+  ok: boolean;
+  run: AiRunSummary;
 }

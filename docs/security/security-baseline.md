@@ -20,6 +20,17 @@ Redis applies short-window login and refresh limits. Login failure is generic an
 
 MFA, recovery email, social login, custom roles, external provider credentials, and every Phase 2 integration remain deliberately deferred.
 
+## Phase 4A AI safety
+
+AI provider credentials reuse the versioned AES-256-GCM integration envelope. Configuration API
+responses are allowlisted and expose only a boolean plus a short suffix hint. Audit metadata strips
+secret-like keys, and AI runs exclude raw prompts and outputs.
+
+AI output is untrusted: structured output must parse and pass an explicit validator before use.
+Timeouts, bounded retries, per-configuration monthly token limits and normalized failure categories
+form the initial denial-of-wallet controls. They do not replace future endpoint rate limiting,
+budgets or billing controls.
+
 # Blogger integration controls
 
 - OAuth state is random, hashed at rest, bound to user/workspace/website/provider, short-lived and

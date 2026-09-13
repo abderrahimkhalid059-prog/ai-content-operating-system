@@ -13,6 +13,7 @@ vi.mock('../src/auth/auth-context', () => ({
       workspaces: [{ id: 'w1', name: 'Espace', permissions: ['users.read'] }],
     },
     selectedWorkspaceId: 'w1',
+    can: vi.fn(() => true),
     selectWorkspace: vi.fn(),
     logout: vi.fn(),
   }),

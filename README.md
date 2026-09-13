@@ -1,8 +1,8 @@
 # AI Content Operating System
 
-Production-oriented Phase 3B foundation for a content operations SaaS. It preserves the validated
-identity, multi-website, Blogger and manual-content layers and adds a human Review Center,
-revision-bound decisions and a controlled provider-neutral Blogger Draft handoff.
+Production-oriented Phase 4A foundation for a content operations SaaS. It preserves the validated
+identity, multi-website, Blogger, manual-content and human-review layers and adds provider-neutral
+AI configuration, prompts, safe mock execution and usage observability without generating content.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ The project is a TypeScript npm-workspaces monorepo built as a modular monolith 
 - `apps/web`: French React/Vite administration application with memory-only access tokens, silent refresh, protected routes, workspace selection, and permission-aware management screens.
 - `apps/worker`: BullMQ worker for health validation and paginated Blogger synchronization.
 - `packages/database`: Prisma 7 PostgreSQL client, schema, migration, seed, and lifecycle wrapper.
-- `packages/integrations`: framework-independent Mock/Live Blogger provider adapters and credential encryption.
+- `packages/integrations`: framework-independent Blogger adapters, credential encryption and the provider-neutral AI runtime with its deterministic no-network mock.
 - `packages/config`, `shared`, `contracts`, and `testing`: framework-neutral shared foundations.
 
 PostgreSQL is the source of truth. Redis provides queue and temporary processing state. See [architecture overview](docs/architecture/overview.md) and the ADRs in `docs/decisions`.
@@ -51,6 +51,10 @@ updates Blogger automatically. Only an explicit action on a `READY_TO_PUBLISH` i
 updates its linked unpublished draft; public publication and external deletion remain unavailable
 from the Phase 3B workflow.
 
+The Phase 4A administration API is documented in [docs/api/ai.md](docs/api/ai.md). It supports
+workspace/site/profile precedence, masked encrypted credentials, an infrastructure probe and
+metadata-only run history. It deliberately exposes no article-generation action.
+
 ## Commands
 
 | Command                                           | Purpose                                            |
@@ -85,13 +89,13 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 3B scope
+## Phase 4A scope
 
-Implemented: all validated Phase 0–3A behavior plus review queues, internal comments, immutable
-revision-bound decisions, granular review/publication RBAC, durable provider-neutral publication
-bindings, idempotent Blogger Draft create/update, synchronization recovery and a French Review
-Center integrated into the manual editor.
+Implemented: all validated Phase 0–3B behavior plus an AI provider contract and registry,
+deterministic mock, versioned strict prompts, validated structured-output boundary, encrypted
+configuration at workspace/site/profile scope, bounded execution policy, usage/cost metadata and a
+small French administration screen.
 
-Not implemented: AI/content generation, research, fact verification, SEO engines, image generation,
+Not implemented: article/content generation, research, fact verification, SEO engines, image generation,
 automatic or scheduled public publishing, WordPress, affiliates, analytics or billing.
 Development fixtures are not production credentials or content.

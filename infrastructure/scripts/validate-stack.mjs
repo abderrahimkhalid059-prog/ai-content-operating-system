@@ -76,6 +76,19 @@ assert.ok(
   Object.keys(swagger.paths).some((path) => path.includes('/integrations/blogger/connect')),
 );
 assert.ok(Object.keys(swagger.paths).some((path) => path.includes('/external-posts')));
+assert.ok(
+  Object.keys(swagger.paths).some((path) =>
+    path.endsWith('/workspaces/{workspaceId}/ai/providers'),
+  ),
+);
+assert.ok(
+  Object.keys(swagger.paths).some((path) =>
+    path.endsWith('/workspaces/{workspaceId}/ai/resolved-configuration'),
+  ),
+);
+assert.ok(
+  Object.keys(swagger.paths).some((path) => path.endsWith('/workspaces/{workspaceId}/ai/runs')),
+);
 
 const webResponse = await fetch(webUrl);
 const webBody = await webResponse.text();
@@ -114,6 +127,28 @@ const isolationWorkspace = await request(`${apiUrl}/workspaces`, {
   headers: { ...authorization, 'content-type': 'application/json' },
   body: JSON.stringify({ name: 'Validation isolation', slug: `validation-${validationSuffix}` }),
 });
+
+const aiBase = `${apiUrl}/workspaces/${isolationWorkspace.id}/ai`;
+const aiProviders = await request(`${aiBase}/providers`, { headers: authorization });
+assert.ok(
+  aiProviders.some((provider) => provider.key === 'mock' && provider.requiresCredentials === false),
+);
+const resolvedAiConfiguration = await request(`${aiBase}/resolved-configuration`, {
+  headers: authorization,
+});
+assert.deepEqual(resolvedAiConfiguration, {
+  workspaceId: isolationWorkspace.id,
+  scope: 'WORKSPACE',
+  providerKey: 'mock',
+  model: 'mock-v1',
+  hasCredential: false,
+  timeoutMs: 10_000,
+  maxRetries: 2,
+  isEnabled: true,
+  source: 'SYSTEM',
+});
+const aiRuns = await request(`${aiBase}/runs`, { headers: authorization });
+assert.deepEqual(aiRuns, []);
 
 const website = await request(`${apiUrl}/workspaces/${primaryWorkspace.id}/websites`, {
   method: 'POST',
@@ -477,5 +512,5 @@ await request(`${apiUrl}/auth/logout`, {
 });
 
 console.log(
-  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Phase 3B review/comments/queues/provider-neutral Blogger Draft create/update/idempotency/synchronization, and Mock Blogger OAuth/discovery/selection/sync/import/labels/safety/disconnect.',
+  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Phase 3B review/comments/queues/provider-neutral Blogger Draft create/update/idempotency/synchronization, Mock Blogger OAuth/discovery/selection/sync/import/labels/safety/disconnect, and Phase 4A read-only AI provider/default-resolution/run-history checks.',
 );

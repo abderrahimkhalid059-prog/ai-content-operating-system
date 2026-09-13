@@ -44,6 +44,14 @@ export function WorkspaceDetailsPage(): React.JSX.Element {
             <p>Configuration multi-site</p>
           </div>
         </Link>
+        {auth.can('ai.config.read', workspaceId) && (
+          <Link className="panel linked-card" to={`/espaces/${workspaceId}/ia`}>
+            <div>
+              <strong>Infrastructure IA</strong>
+              <p>Fournisseurs, limites et exécutions</p>
+            </div>
+          </Link>
+        )}
         <article className="panel">
           <strong>Votre rôle</strong>
           <p>{workspace.data?.role}</p>

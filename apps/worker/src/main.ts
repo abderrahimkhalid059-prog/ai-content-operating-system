@@ -19,6 +19,7 @@ const logger = pino({
       'token',
       'secret',
       'apiKey',
+      'credential',
       'authorization',
       'cookie',
       'DATABASE_URL',

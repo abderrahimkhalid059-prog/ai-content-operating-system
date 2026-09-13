@@ -51,6 +51,10 @@ const allPermissions: Permission[] = [
   'providerPublishing.update',
   'providerPublishing.publish',
   'providerPublishing.delete',
+  'ai.config.read',
+  'ai.config.update',
+  'ai.config.test',
+  'ai.runs.read',
   'audit.read',
 ];
 
@@ -66,6 +70,8 @@ const readPermissions: Permission[] = [
   'contents.publication.read',
   'integrations.read',
   'externalPosts.read',
+  'ai.config.read',
+  'ai.runs.read',
 ];
 
 export const ROLE_PERMISSIONS: Record<WorkspaceRoleContract, readonly Permission[]> = {
@@ -82,6 +88,7 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRoleContract, readonly Permission
     'contentProfiles.update',
     'contentProfiles.delete',
     'integrations.test',
+    'ai.config.test',
     'integrations.sync',
     'externalPosts.import',
     'providerPublishing.createDraft',

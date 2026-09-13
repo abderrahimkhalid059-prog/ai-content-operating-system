@@ -12,6 +12,7 @@ import { DatabaseModule } from './infrastructure/database/database.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AiModule } from './modules/ai/ai.module';
 import { AuditApiModule } from './modules/audit/audit-api.module';
 import { ContentProfilesModule } from './modules/content-profiles/content-profiles.module';
 import { ContentsModule } from './modules/contents/contents.module';
@@ -38,6 +39,7 @@ import { WebsitesModule } from './modules/websites/websites.module';
             '*.token',
             '*.secret',
             '*.apiKey',
+            '*.credential',
             '*.DATABASE_URL',
             '*.JWT_ACCESS_SECRET',
             '*.REFRESH_TOKEN_SECRET',
@@ -67,6 +69,7 @@ import { WebsitesModule } from './modules/websites/websites.module';
     QueueModule,
     AuditModule,
     AuthModule,
+    AiModule,
     AuditApiModule,
     UsersModule,
     WorkspacesModule,

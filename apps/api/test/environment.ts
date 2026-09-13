@@ -29,4 +29,7 @@ Object.assign(process.env, {
   BLOGGER_ALLOW_DELETE: 'true',
   BLOGGER_MAX_RETRIES: '2',
   BLOGGER_SYNC_PAGE_SIZE: '2',
+  INTEGRATION_ENCRYPTION_KEY:
+    process.env.INTEGRATION_ENCRYPTION_KEY ?? Buffer.alloc(32, 4).toString('base64'),
+  INTEGRATION_ENCRYPTION_KEY_VERSION: process.env.INTEGRATION_ENCRYPTION_KEY_VERSION ?? 'test-v1',
 });

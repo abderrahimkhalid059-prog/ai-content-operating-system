@@ -15,6 +15,18 @@ Session indexes cover `(user_id, revoked_at)`, expiry, and family. Tenant indexe
 
 Pre-Phase-1 users receive a non-login sentinel hash and `must_change_password=true`; an explicit development seed or authorized administrative reset must establish an Argon2id credential.
 
+# Phase 4A AI records
+
+`ai_configurations` has one idempotently upserted row per `(workspace_id, scope, scope_key)`. SQL
+checks bind each scope key to the workspace, site or content profile UUID. Composite foreign keys
+verify that site and profile share the workspace. Credentials are encrypted envelopes with a key
+version and a display-only suffix hint.
+
+`ai_runs` stores correlation, provider/model, operation, prompt identifier/version, status,
+latency, retries, reported usage, optional configured-cost estimate and normalized failure only.
+Prompt text, response text and credentials are intentionally absent. `(workspace_id,
+idempotency_key)` is unique for future safe command execution.
+
 # Phase 2 integration records
 
 `WebsiteConnection` scopes a provider account/blog to both Workspace and Website. A partial unique

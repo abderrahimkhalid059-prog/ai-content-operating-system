@@ -11,6 +11,7 @@ import {
   ContentRevisionsPage,
 } from './pages/contents/content-ui';
 import { ReviewCenterPage } from './pages/contents/review-center';
+import { AiInfrastructurePage } from './pages/ai/ai-infrastructure';
 import { DashboardPage } from './pages/dashboard';
 import { ForbiddenPage } from './pages/forbidden';
 import { LoginPage } from './pages/auth/login';
@@ -67,6 +68,11 @@ export function App(): React.JSX.Element {
                       <Route exact path="/espaces/:workspaceId/sites">
                         <PermissionRoute permission="websites.read">
                           <WebsitesPage />
+                        </PermissionRoute>
+                      </Route>
+                      <Route exact path="/espaces/:workspaceId/ia">
+                        <PermissionRoute permission="ai.config.read">
+                          <AiInfrastructurePage />
                         </PermissionRoute>
                       </Route>
                       <Route exact path="/espaces/:workspaceId/sites/nouveau">

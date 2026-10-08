@@ -90,6 +90,8 @@ export type Permission =
   | 'ai.config.update'
   | 'ai.config.test'
   | 'ai.runs.read'
+  | 'contents.ai.generate'
+  | 'contents.ai.apply'
   | 'audit.read';
 
 export interface SafeUserSummary {
@@ -257,6 +259,10 @@ export interface ContentRevisionSummary {
   changedByUserId: string;
   changeReason?: string;
   changedAt: string;
+  origin?: 'MANUAL' | 'AI_GENERATED';
+  aiRunId?: string;
+  aiGenerationCandidateId?: string;
+  baseRevisionNumber?: number;
 }
 
 export type ContentCommentStatus = 'OPEN' | 'RESOLVED';
@@ -751,4 +757,46 @@ export type ResolvedAiConfiguration = AiConfigurationSummary;
 export interface AiProviderTestResult {
   ok: boolean;
   run: AiRunSummary;
+}
+
+export type AiGenerationCandidateStatus = 'PENDING' | 'READY' | 'FAILED' | 'APPLIED' | 'DISCARDED';
+
+export interface AiArticleDraft {
+  title: string;
+  excerpt?: string;
+  bodyHtml: string;
+  suggestedSlug?: string;
+  metaDescription?: string;
+  suggestedLabels: string[];
+  warnings: string[];
+}
+
+export interface AiGenerationCandidateSummary {
+  id: string;
+  workspaceId: string;
+  websiteId: string;
+  contentItemId: string;
+  contentProfileId: string;
+  aiRunId?: string;
+  status: AiGenerationCandidateStatus;
+  baseRevisionNumber: number;
+  draft?: AiArticleDraft;
+  providerKey?: string;
+  model?: string;
+  promptIdentifier: string;
+  promptVersion: number;
+  createdByUserId: string;
+  appliedByUserId?: string;
+  appliedRevisionNumber?: number;
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiGenerationApplyResult {
+  candidateId: string;
+  contentItemId: string;
+  status: 'APPLIED';
+  revisionNumber: number;
+  aiRunId: string;
 }

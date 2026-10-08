@@ -1,15 +1,18 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
+  AiGenerationApplyResult,
   ContentItemSummary,
   ContentRevisionSummary,
   PaginationResponse,
   Permission,
 } from '@ai-content-os/contracts';
 import {
+  AiGenerationCandidateStatus,
   ContentEditorialStatus,
   ContentProfileStatus,
   ContentPublicationStatus,
   ContentReviewDecision,
+  ContentRevisionOrigin,
   DatabaseService,
   Prisma,
   UserStatus,
@@ -494,6 +497,238 @@ export class ContentsService {
     return this.present(updated);
   }
 
+  async applyAiGenerationCandidate(
+    actor: AuthContext,
+    workspace: WorkspaceContext,
+    websiteId: string,
+    contentId: string,
+    candidateId: string,
+    request: AuthenticatedRequest,
+  ): Promise<AiGenerationApplyResult> {
+    const candidate = await this.database.aiGenerationCandidate.findFirst({
+      where: { id: candidateId, workspaceId: workspace.id, websiteId, contentItemId: contentId },
+      include: { contentProfile: true },
+    });
+    if (!candidate) {
+      throw new CodedHttpException(
+        HttpStatus.NOT_FOUND,
+        ERROR_CODES.aiGenerationNotFound,
+        'Brouillon IA introuvable.',
+      );
+    }
+    if (candidate.status === AiGenerationCandidateStatus.APPLIED) {
+      return {
+        candidateId: candidate.id,
+        contentItemId: contentId,
+        status: 'APPLIED',
+        revisionNumber: candidate.appliedRevisionNumber!,
+        aiRunId: candidate.aiRunId!,
+      };
+    }
+    if (candidate.status !== AiGenerationCandidateStatus.READY) {
+      throw new CodedHttpException(
+        HttpStatus.CONFLICT,
+        candidate.status === AiGenerationCandidateStatus.DISCARDED
+          ? ERROR_CODES.aiGenerationDiscarded
+          : ERROR_CODES.aiGenerationFailed,
+        'Ce brouillon IA ne peut pas être appliqué.',
+      );
+    }
+    if (
+      !candidate.title ||
+      !candidate.htmlContent ||
+      !candidate.aiRunId ||
+      candidate.contentProfile.status !== ContentProfileStatus.ACTIVE
+    ) {
+      throw new CodedHttpException(
+        HttpStatus.CONFLICT,
+        ERROR_CODES.aiGenerationFailed,
+        'Le brouillon IA ou son profil éditorial n’est plus utilisable.',
+      );
+    }
+    const current = await this.find(workspace.id, websiteId, contentId);
+    if (current.version !== candidate.baseRevisionNumber) {
+      throw new CodedHttpException(
+        HttpStatus.CONFLICT,
+        ERROR_CODES.aiGenerationStale,
+        'Une version plus récente existe. Régénérez le brouillon IA.',
+      );
+    }
+    if (current.editorialStatus === ContentEditorialStatus.ARCHIVED) {
+      this.invalidTransition('Un contenu archivé est en lecture seule.');
+    }
+    const html = this.validHtml(candidate.htmlContent);
+    const metrics = calculateContentMetrics(html);
+    const labels = this.validLabels(this.stringArray(candidate.suggestedLabels));
+    const title = this.normalizedTitle(candidate.title);
+    const slug = candidate.suggestedSlug ? this.validSlug(candidate.suggestedSlug) : current.slug;
+    try {
+      const applied = await this.database.$transaction(
+        async (transaction) => {
+          const claimed = await transaction.aiGenerationCandidate.updateMany({
+            where: {
+              id: candidate.id,
+              workspaceId: workspace.id,
+              websiteId,
+              contentItemId: contentId,
+              status: AiGenerationCandidateStatus.READY,
+            },
+            data: {
+              status: AiGenerationCandidateStatus.APPLIED,
+              appliedByUserId: actor.userId,
+              appliedAt: new Date(),
+              appliedRevisionNumber: candidate.baseRevisionNumber + 1,
+            },
+          });
+          if (claimed.count !== 1) {
+            const replay = await transaction.aiGenerationCandidate.findFirst({
+              where: { id: candidate.id, workspaceId: workspace.id, websiteId },
+            });
+            if (
+              replay?.status === AiGenerationCandidateStatus.APPLIED &&
+              replay.appliedRevisionNumber &&
+              replay.aiRunId
+            ) {
+              return {
+                revisionNumber: replay.appliedRevisionNumber,
+                aiRunId: replay.aiRunId,
+                replayed: true,
+              };
+            }
+            throw new CodedHttpException(
+              HttpStatus.CONFLICT,
+              ERROR_CODES.aiGenerationAlreadyApplied,
+              'Ce brouillon IA a déjà été traité.',
+            );
+          }
+          const changed = await transaction.contentItem.updateMany({
+            where: {
+              id: contentId,
+              workspaceId: workspace.id,
+              websiteId,
+              version: candidate.baseRevisionNumber,
+            },
+            data: {
+              title,
+              slug,
+              excerpt: candidate.excerpt,
+              htmlContent: html,
+              ...metrics,
+              metaDescription: candidate.metaDescription,
+              labels,
+              language: candidate.contentProfile.language,
+              locale: candidate.contentProfile.locale,
+              contentProfileId: candidate.contentProfileId,
+              editorialStatus: ContentEditorialStatus.DRAFT,
+              version: { increment: 1 },
+            },
+          });
+          if (changed.count !== 1) {
+            throw new CodedHttpException(
+              HttpStatus.CONFLICT,
+              ERROR_CODES.aiGenerationStale,
+              'Une version plus récente existe. Régénérez le brouillon IA.',
+            );
+          }
+          const updated = await transaction.contentItem.findFirstOrThrow({
+            where: { id: contentId, workspaceId: workspace.id, websiteId },
+          });
+          await this.createRevision(
+            transaction,
+            updated,
+            actor.userId,
+            'Brouillon IA accepté après prévisualisation.',
+            {
+              origin: ContentRevisionOrigin.AI_GENERATED,
+              aiRunId: candidate.aiRunId!,
+              candidateId: candidate.id,
+              baseRevisionNumber: candidate.baseRevisionNumber,
+            },
+          );
+          return {
+            revisionNumber: updated.version,
+            aiRunId: candidate.aiRunId!,
+            replayed: false,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      if (!applied.replayed) {
+        await this.audit.record(
+          {
+            action: 'content.ai_generation_applied',
+            actorUserId: actor.userId,
+            workspaceId: workspace.id,
+            websiteId,
+            targetType: 'ContentItem',
+            targetId: contentId,
+            metadata: {
+              candidateId: candidate.id,
+              aiRunId: applied.aiRunId,
+              baseRevisionNumber: candidate.baseRevisionNumber,
+              resultingRevisionNumber: applied.revisionNumber,
+              contentProfileId: candidate.contentProfileId,
+            },
+          },
+          request,
+        );
+        await this.audit.record(
+          {
+            action: 'content.revision_created',
+            actorUserId: actor.userId,
+            workspaceId: workspace.id,
+            websiteId,
+            targetType: 'ContentItem',
+            targetId: contentId,
+            metadata: {
+              revisionNumber: applied.revisionNumber,
+              origin: 'AI_GENERATED',
+              aiRunId: applied.aiRunId,
+            },
+          },
+          request,
+        );
+      }
+      return {
+        candidateId: candidate.id,
+        contentItemId: contentId,
+        status: 'APPLIED',
+        revisionNumber: applied.revisionNumber,
+        aiRunId: applied.aiRunId,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        const replay = await this.database.aiGenerationCandidate.findFirst({
+          where: {
+            id: candidate.id,
+            workspaceId: workspace.id,
+            websiteId,
+            contentItemId: contentId,
+          },
+        });
+        if (
+          replay?.status === AiGenerationCandidateStatus.APPLIED &&
+          replay.appliedRevisionNumber &&
+          replay.aiRunId
+        ) {
+          return {
+            candidateId: candidate.id,
+            contentItemId: contentId,
+            status: 'APPLIED',
+            revisionNumber: replay.appliedRevisionNumber,
+            aiRunId: replay.aiRunId,
+          };
+        }
+        throw new CodedHttpException(
+          HttpStatus.CONFLICT,
+          ERROR_CODES.aiGenerationAlreadyApplied,
+          'Ce brouillon IA est déjà en cours d’application.',
+        );
+      }
+      this.handleWriteError(error);
+    }
+  }
+
   async revisions(
     workspaceId: string,
     websiteId: string,
@@ -563,6 +798,12 @@ export class ContentsService {
     item: ContentItem,
     changedByUserId: string,
     changeReason?: string,
+    provenance?: {
+      origin: ContentRevisionOrigin;
+      aiRunId: string;
+      candidateId: string;
+      baseRevisionNumber: number;
+    },
   ) {
     return transaction.contentRevision.create({
       data: {
@@ -590,6 +831,14 @@ export class ContentsService {
         contentProfileId: item.contentProfileId,
         changedByUserId,
         changeReason: this.optionalText(changeReason),
+        ...(provenance
+          ? {
+              origin: provenance.origin,
+              aiRunId: provenance.aiRunId,
+              aiGenerationCandidateId: provenance.candidateId,
+              baseRevisionNumber: provenance.baseRevisionNumber,
+            }
+          : {}),
       },
     });
   }
@@ -861,6 +1110,14 @@ export class ContentsService {
       changedByUserId: revision.changedByUserId,
       ...(revision.changeReason ? { changeReason: revision.changeReason } : {}),
       changedAt: revision.changedAt.toISOString(),
+      origin: revision.origin,
+      ...(revision.aiRunId ? { aiRunId: revision.aiRunId } : {}),
+      ...(revision.aiGenerationCandidateId
+        ? { aiGenerationCandidateId: revision.aiGenerationCandidateId }
+        : {}),
+      ...(revision.baseRevisionNumber !== null
+        ? { baseRevisionNumber: revision.baseRevisionNumber }
+        : {}),
     };
   }
 

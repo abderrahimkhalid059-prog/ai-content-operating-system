@@ -1,4 +1,4 @@
-# API de contenu — Phases 3A et 3B
+# API de contenu — Phases 3A, 3B et 4B
 
 Toutes les routes sont sous `/api/v1/workspaces/:workspaceId/websites/:websiteId/contents`, exigent un JWT et héritent des contrôles d’appartenance à l’espace. Un identifiant provenant d’un autre espace ou site est traité comme introuvable.
 
@@ -61,3 +61,20 @@ n’est accepté. Un rechargement reconstruit `NOT_CONNECTED`, `DRAFT_CREATED`, 
 
 Ce flux ne fournit aucun endpoint de publication publique ou suppression. Un brouillon manquant
 confirmé n’est jamais recréé automatiquement.
+
+## Génération d’article contrôlée
+
+Les routes suivantes sont sous `/:contentId/ai-generations` :
+
+| Méthode | Route                   | Permission             | Effet                                   |
+| ------- | ----------------------- | ---------------------- | --------------------------------------- |
+| `POST`  | `/`                     | `contents.ai.generate` | Crée un aperçu durable sans révision    |
+| `POST`  | `/:candidateId/apply`   | `contents.ai.apply`    | Crée au plus une révision interne       |
+| `POST`  | `/:candidateId/discard` | `contents.ai.generate` | Ignore l’aperçu sans modifier l’article |
+
+La génération exige `expectedVersion`, un profil éditorial actif du même site, un sujet borné et
+une clé d’idempotence. Le candidat conserve la version de base, le prompt, l’exécution et une sortie
+assainie, mais aucun identifiant fournisseur secret, prompt rendu ou jeton. Un article modifié après
+la génération produit `AI_GENERATION_STALE`. Une application réussie reste `DRAFT` et
+`NOT_PUBLISHED`, et sa révision porte l’origine `AI_GENERATED`, l’`aiRunId`, le candidat et la
+version de base. Aucun ID externe ni action Blogger n’est accepté par ce flux.

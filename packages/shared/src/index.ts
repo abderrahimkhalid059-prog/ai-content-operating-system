@@ -76,6 +76,12 @@ export const ERROR_CODES = {
   aiCredentialUnavailable: 'AI_CREDENTIAL_UNAVAILABLE',
   aiMonthlyLimitReached: 'AI_MONTHLY_LIMIT_REACHED',
   aiProviderFailed: 'AI_PROVIDER_FAILED',
+  aiGenerationNotFound: 'AI_GENERATION_NOT_FOUND',
+  aiGenerationInProgress: 'AI_GENERATION_IN_PROGRESS',
+  aiGenerationFailed: 'AI_GENERATION_FAILED',
+  aiGenerationStale: 'AI_GENERATION_STALE',
+  aiGenerationAlreadyApplied: 'AI_GENERATION_ALREADY_APPLIED',
+  aiGenerationDiscarded: 'AI_GENERATION_DISCARDED',
 } as const;
 
 export type CorrelationId = string;

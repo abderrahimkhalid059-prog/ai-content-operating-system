@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import type {
   AiConfigurationSummary,
+  AiGenerationResult,
+  AiOutputFormat,
   AiProviderDescriptor,
   AiProviderTestResult,
   AiRunSummary,
@@ -31,6 +33,28 @@ import type { AiRunsQueryDto, AiScopeQueryDto, UpsertAiConfigurationDto } from '
 import { AiProviderFactory } from './ai-provider.factory';
 
 type ConfigurationRow = Awaited<ReturnType<AiService['findConfiguration']>>;
+
+export interface AiBusinessOperationInput<T> {
+  workspaceId: string;
+  websiteId?: string;
+  contentProfileId?: string;
+  idempotencyKey: string;
+  operation: string;
+  prompt: {
+    identifier: string;
+    version: number;
+    systemInstructions?: string;
+    userPrompt: string;
+  };
+  outputFormat: AiOutputFormat;
+  correlationId: string;
+  validate(result: AiGenerationResult): T;
+}
+
+export interface AiBusinessOperationResult<T> {
+  value: T;
+  run: AiRunSummary;
+}
 
 @Injectable()
 export class AiService {
@@ -195,6 +219,132 @@ export class AiService {
       };
     }
     return this.presentConfiguration(configuration);
+  }
+
+  async executeBusinessOperation<T>(
+    input: AiBusinessOperationInput<T>,
+  ): Promise<AiBusinessOperationResult<T>> {
+    const resolved = await this.resolve(input.workspaceId, {
+      ...(input.websiteId ? { websiteId: input.websiteId } : {}),
+      ...(input.contentProfileId ? { contentProfileId: input.contentProfileId } : {}),
+    });
+    const configuration = resolved.id
+      ? await this.findConfiguration(input.workspaceId, resolved.id)
+      : undefined;
+    if (configuration) await this.enforceMonthlyLimit(configuration);
+    const provider = this.factory.providers.get(resolved.providerKey);
+    let credential: string | undefined;
+    if (configuration?.encryptedCredentials && configuration.credentialKeyVersion) {
+      try {
+        credential = this.factory.encryption.decrypt<{ credential: string }>(
+          configuration.encryptedCredentials,
+          configuration.credentialKeyVersion,
+        ).credential;
+      } catch {
+        throw new CodedHttpException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          ERROR_CODES.aiCredentialUnavailable,
+          'Les identifiants du fournisseur IA ne peuvent pas être utilisés.',
+        );
+      }
+    }
+    if (provider.requiresCredentials && !credential) {
+      throw new CodedHttpException(
+        HttpStatus.CONFLICT,
+        ERROR_CODES.aiCredentialUnavailable,
+        'Un identifiant fournisseur est requis.',
+      );
+    }
+    const run = await this.database.aiRun.create({
+      data: {
+        workspaceId: input.workspaceId,
+        websiteId: input.websiteId ?? null,
+        contentProfileId: input.contentProfileId ?? null,
+        configurationId: configuration?.id ?? null,
+        idempotencyKey: input.idempotencyKey,
+        providerKey: resolved.providerKey,
+        model: resolved.model,
+        operation: input.operation,
+        promptIdentifier: input.prompt.identifier,
+        promptVersion: input.prompt.version,
+        correlationId: input.correlationId,
+      },
+    });
+    try {
+      const execution = await executeAiRequest(
+        provider,
+        {
+          model: resolved.model,
+          ...(input.prompt.systemInstructions
+            ? { systemInstructions: input.prompt.systemInstructions }
+            : {}),
+          messages: [{ role: 'USER', content: input.prompt.userPrompt }],
+          outputFormat: input.outputFormat,
+          parameters: {
+            ...(configuration?.temperature !== null && configuration?.temperature !== undefined
+              ? { temperature: configuration.temperature }
+              : {}),
+            ...(configuration?.maxOutputTokens !== null &&
+            configuration?.maxOutputTokens !== undefined
+              ? { maxOutputTokens: configuration.maxOutputTokens }
+              : {}),
+          },
+        },
+        { timeoutMs: resolved.timeoutMs, maxRetries: resolved.maxRetries },
+        { ...(credential ? { credential } : {}), correlationId: input.correlationId },
+      );
+      const value = input.validate(execution.result);
+      const usage = execution.result.usage;
+      const cost = configuration
+        ? this.estimateCost(configuration, usage?.inputTokens, usage?.outputTokens)
+        : null;
+      const completed = await this.database.aiRun.update({
+        where: { id: run.id },
+        data: {
+          status: AiRunStatus.COMPLETED,
+          completedAt: new Date(),
+          latencyMs: execution.latencyMs,
+          retryCount: execution.retryCount,
+          inputTokens: usage?.inputTokens ?? null,
+          outputTokens: usage?.outputTokens ?? null,
+          totalTokens: usage?.totalTokens ?? null,
+          estimatedCostMicros: cost,
+          costCurrency: cost === null ? null : (configuration?.pricingCurrency ?? null),
+        },
+      });
+      this.logger.log({
+        operation: input.operation,
+        providerKey: resolved.providerKey,
+        model: resolved.model,
+        correlationId: input.correlationId,
+        retryCount: execution.retryCount,
+        status: 'COMPLETED',
+      });
+      return { value, run: this.presentRun(completed) };
+    } catch (error) {
+      const normalized = normalizeAiProviderError(error);
+      await this.database.aiRun.update({
+        where: { id: run.id },
+        data: {
+          status: AiRunStatus.FAILED,
+          completedAt: new Date(),
+          retryCount: normalized.retryCount,
+          errorCategory: normalized.category,
+          errorCode: normalized.code,
+        },
+      });
+      this.logger.warn({
+        operation: input.operation,
+        providerKey: resolved.providerKey,
+        model: resolved.model,
+        correlationId: input.correlationId,
+        retryCount: normalized.retryCount,
+        errorCategory: normalized.category,
+        errorCode: normalized.code,
+        status: 'FAILED',
+      });
+      throw this.providerException(normalized);
+    }
   }
 
   async testConfiguration(
@@ -582,7 +732,7 @@ export class AiService {
     return new CodedHttpException(
       status,
       error.code || ERROR_CODES.aiProviderFailed,
-      'Le test du fournisseur IA a échoué. Consultez le journal des exécutions.',
+      'L’opération du fournisseur IA a échoué. Consultez le journal des exécutions.',
     );
   }
 

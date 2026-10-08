@@ -89,6 +89,10 @@ assert.ok(
 assert.ok(
   Object.keys(swagger.paths).some((path) => path.endsWith('/workspaces/{workspaceId}/ai/runs')),
 );
+assert.ok(Object.keys(swagger.paths).some((path) => path.endsWith('/ai-generations')));
+assert.ok(
+  Object.keys(swagger.paths).some((path) => path.endsWith('/ai-generations/{candidateId}/apply')),
+);
 
 const webResponse = await fetch(webUrl);
 const webBody = await webResponse.text();
@@ -149,6 +153,84 @@ assert.deepEqual(resolvedAiConfiguration, {
 });
 const aiRuns = await request(`${aiBase}/runs`, { headers: authorization });
 assert.deepEqual(aiRuns, []);
+
+const aiValidationWebsite = await request(
+  `${apiUrl}/workspaces/${isolationWorkspace.id}/websites`,
+  {
+    method: 'POST',
+    headers: { ...authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Validation IA mock',
+      slug: `validation-ai-${validationSuffix}`,
+      platform: 'OTHER',
+      language: 'fr',
+      locale: 'fr-MA',
+      timezone: 'Africa/Casablanca',
+      status: 'ACTIVE',
+    }),
+  },
+);
+const aiValidationSiteBase = `${apiUrl}/workspaces/${isolationWorkspace.id}/websites/${aiValidationWebsite.id}`;
+const aiValidationProfile = await request(`${aiValidationSiteBase}/content-profiles`, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Profil IA de validation',
+    language: 'fr',
+    locale: 'fr-MA',
+    tone: 'Clair',
+    editorialRules: { humanReviewRequired: true },
+    isDefault: true,
+  }),
+});
+const aiValidationContentBase = `${aiValidationSiteBase}/contents`;
+const aiValidationContent = await request(aiValidationContentBase, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    title: 'Validation génération IA contrôlée',
+    slug: `validation-ai-${validationSuffix}`,
+    htmlContent: '<p>Version humaine initiale.</p>',
+    language: 'fr',
+    locale: 'fr-MA',
+    labels: ['validation'],
+    editorialStatus: 'DRAFT',
+    contentProfileId: aiValidationProfile.id,
+  }),
+});
+const aiGenerationBase = `${aiValidationContentBase}/${aiValidationContent.id}/ai-generations`;
+const aiPreview = await request(aiGenerationBase, {
+  method: 'POST',
+  headers: { ...authorization, 'content-type': 'application/json' },
+  body: JSON.stringify({
+    expectedVersion: aiValidationContent.version,
+    contentProfileId: aiValidationProfile.id,
+    topic: 'Validation déterministe du fournisseur mock',
+    idempotencyKey: `stack-ai-${validationSuffix}`,
+  }),
+});
+assert.equal(aiPreview.status, 'READY');
+assert.equal(aiPreview.providerKey, 'mock');
+assert.equal(aiPreview.promptIdentifier, 'article.draft');
+assert.equal(aiPreview.promptVersion, 1);
+const unchangedAiContent = await request(`${aiValidationContentBase}/${aiValidationContent.id}`, {
+  headers: authorization,
+});
+assert.equal(unchangedAiContent.version, aiValidationContent.version);
+const appliedAiPreview = await request(`${aiGenerationBase}/${aiPreview.id}/apply`, {
+  method: 'POST',
+  headers: authorization,
+});
+assert.equal(appliedAiPreview.status, 'APPLIED');
+assert.equal(appliedAiPreview.revisionNumber, aiValidationContent.version + 1);
+const aiRevisions = await request(
+  `${aiValidationContentBase}/${aiValidationContent.id}/revisions`,
+  {
+    headers: authorization,
+  },
+);
+assert.equal(aiRevisions[0].origin, 'AI_GENERATED');
+assert.equal(aiRevisions[0].aiRunId, aiPreview.aiRunId);
 
 const website = await request(`${apiUrl}/workspaces/${primaryWorkspace.id}/websites`, {
   method: 'POST',
@@ -512,5 +594,5 @@ await request(`${apiUrl}/auth/logout`, {
 });
 
 console.log(
-  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Phase 3B review/comments/queues/provider-neutral Blogger Draft create/update/idempotency/synchronization, Mock Blogger OAuth/discovery/selection/sync/import/labels/safety/disconnect, and Phase 4A read-only AI provider/default-resolution/run-history checks.',
+  'Full-stack validation passed: API, web, worker, PostgreSQL, Redis, BullMQ, health, Swagger, auth rotation, tenant isolation, Phase 3A content/revisions/concurrency/workflow/archive, Phase 3B review/comments/queues/provider-neutral Blogger Draft create/update/idempotency/synchronization, Mock Blogger OAuth/discovery/selection/sync/import/labels/safety/disconnect, Phase 4A AI provider/default-resolution/run-history checks, and Phase 4B controlled mock preview/apply/provenance checks.',
 );

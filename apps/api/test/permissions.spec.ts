@@ -54,4 +54,14 @@ describe('fixed workspace permissions', () => {
     expect(permissionsForRole('VIEWER')).toContain('ai.runs.read');
     expect(permissionsForRole('VIEWER')).not.toContain('ai.config.test');
   });
+
+  it('restricts controlled article generation to Owner, Admin, and Editor', () => {
+    expect(permissionsForRole('OWNER')).toContain('contents.ai.generate');
+    expect(permissionsForRole('ADMIN')).toContain('contents.ai.apply');
+    expect(permissionsForRole('EDITOR')).toContain('contents.ai.generate');
+    expect(permissionsForRole('EDITOR')).toContain('contents.ai.apply');
+    expect(permissionsForRole('WRITER')).not.toContain('contents.ai.generate');
+    expect(permissionsForRole('REVIEWER')).not.toContain('contents.ai.apply');
+    expect(permissionsForRole('VIEWER')).not.toContain('contents.ai.generate');
+  });
 });

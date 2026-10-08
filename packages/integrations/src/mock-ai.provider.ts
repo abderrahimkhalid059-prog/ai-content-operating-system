@@ -34,7 +34,7 @@ export class MockAiProvider implements AiProvider {
   async generate(request: AiGenerationRequest): Promise<AiGenerationResult> {
     this.attempts += 1;
     if (request.signal?.aborted) throw this.abortError();
-    const scenario = this.options.scenario ?? 'SUCCESS';
+    const scenario = this.options.scenario ?? this.scenarioForModel(request.model);
     if (scenario === 'TIMEOUT') {
       return new Promise((_, reject) => {
         request.signal?.addEventListener('abort', () => reject(this.abortError()), { once: true });
@@ -81,11 +81,23 @@ export class MockAiProvider implements AiProvider {
       );
     }
 
+    const articleDraft = request.systemInstructions?.includes('ARTICLE_DRAFT_SCHEMA_V1')
+      ? {
+          title: 'Brouillon éditorial déterministe',
+          excerpt: 'Aperçu généré de manière déterministe pour validation humaine.',
+          bodyHtml:
+            '<h2>Brouillon contrôlé</h2><p>Ce contenu générique doit être relu avant toute utilisation.</p>',
+          suggestedSlug: 'brouillon-editorial-determine',
+          metaDescription: 'Brouillon éditorial déterministe destiné à une validation humaine.',
+          suggestedLabels: ['brouillon', 'validation'],
+          warnings: ['Vérifier les faits avant approbation.'],
+        }
+      : undefined;
     const text =
       scenario === 'MALFORMED_STRUCTURED'
         ? '{not-json'
         : scenario === 'STRUCTURED_SUCCESS' || request.outputFormat === 'JSON'
-          ? JSON.stringify({ ok: true, value: 'mock-structured-result' })
+          ? JSON.stringify(articleDraft ?? { ok: true, value: 'mock-structured-result' })
           : `mock:${request.messages.map((message) => message.content).join('|')}`;
     return {
       text,
@@ -98,5 +110,15 @@ export class MockAiProvider implements AiProvider {
     const error = new Error('The operation was aborted.');
     error.name = 'AbortError';
     return error;
+  }
+
+  private scenarioForModel(model: string): MockAiScenario {
+    const scenarios: Record<string, MockAiScenario> = {
+      'mock-malformed-structured': 'MALFORMED_STRUCTURED',
+      'mock-provider-error': 'PROVIDER_ERROR',
+      'mock-timeout': 'TIMEOUT',
+      'mock-rate-limit': 'RATE_LIMIT',
+    };
+    return scenarios[model.trim().toLowerCase()] ?? 'SUCCESS';
   }
 }

@@ -67,3 +67,16 @@ connection and provider post as strings, the last synchronized internal revision
 `PENDING`/`ACTIVE`/`MISSING`/`ERROR` lifecycle. The existing `provider_publications` operation journal
 gains an optional binding foreign key and binding-scoped idempotency uniqueness. Reconnection may
 change the connection row while preserving the content publication association and external post.
+
+# Phase 4B controlled-generation records
+
+Migration `20261008120000_phase_4b_controlled_article_generation` adds
+`ai_generation_candidates` and revision provenance without changing older migrations. Candidates
+are tenant/site/content/profile scoped and move through `PENDING`, `READY`, `FAILED`, `APPLIED` or
+`DISCARDED`. Workspace idempotency is unique, an `AiRun` can belong to only one candidate, and
+database checks keep preview and apply fields consistent.
+
+`content_revisions.origin` defaults to `MANUAL`. An `AI_GENERATED` revision must contain the
+workspace-scoped AI run, candidate and base revision. Composite foreign keys prevent provenance
+from crossing workspace, website or content boundaries; a unique candidate reference enforces
+at-most-once application.

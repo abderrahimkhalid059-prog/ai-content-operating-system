@@ -55,6 +55,8 @@ const allPermissions: Permission[] = [
   'ai.config.update',
   'ai.config.test',
   'ai.runs.read',
+  'contents.ai.generate',
+  'contents.ai.apply',
   'audit.read',
 ];
 
@@ -89,6 +91,8 @@ export const ROLE_PERMISSIONS: Record<WorkspaceRoleContract, readonly Permission
     'contentProfiles.delete',
     'integrations.test',
     'ai.config.test',
+    'contents.ai.generate',
+    'contents.ai.apply',
     'integrations.sync',
     'externalPosts.import',
     'providerPublishing.createDraft',

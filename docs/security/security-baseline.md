@@ -31,6 +31,19 @@ Timeouts, bounded retries, per-configuration monthly token limits and normalized
 form the initial denial-of-wallet controls. They do not replace future endpoint rate limiting,
 budgets or billing controls.
 
+## Phase 4B controlled-generation safety
+
+Article generation is split from application. The provider response is never written directly to
+the current article: a strict allowlist validates JSON fields, executable HTML is rejected, allowed
+markup is sanitized, and limits are enforced before a durable preview is returned. The browser
+renders preview HTML as text.
+
+Apply requires a separate permission and a matching base version. A serializable transaction
+claims the candidate once, creates one immutable revision, preserves `DRAFT`/`NOT_PUBLISHED`, and
+records server-resolved provenance. Prompts, generated bodies, credentials and tokens are absent
+from audit metadata and AI run history. Tenant predicates and composite keys bind the user,
+workspace, website, profile, content, run and candidate.
+
 # Blogger integration controls
 
 - OAuth state is random, hashed at rest, bound to user/workspace/website/provider, short-lived and

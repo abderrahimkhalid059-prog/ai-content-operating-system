@@ -1,8 +1,8 @@
 # AI Content Operating System
 
-Production-oriented Phase 4A foundation for a content operations SaaS. It preserves the validated
-identity, multi-website, Blogger, manual-content and human-review layers and adds provider-neutral
-AI configuration, prompts, safe mock execution and usage observability without generating content.
+Production-oriented Phase 4B foundation for a content operations SaaS. It preserves the validated
+identity, multi-website, Blogger, manual-content and human-review layers and adds controlled,
+human-confirmed article-draft generation on the provider-neutral Phase 4A runtime.
 
 ## Architecture
 
@@ -51,9 +51,10 @@ updates Blogger automatically. Only an explicit action on a `READY_TO_PUBLISH` i
 updates its linked unpublished draft; public publication and external deletion remain unavailable
 from the Phase 3B workflow.
 
-The Phase 4A administration API is documented in [docs/api/ai.md](docs/api/ai.md). It supports
+The AI administration API is documented in [docs/api/ai.md](docs/api/ai.md). It supports
 workspace/site/profile precedence, masked encrypted credentials, an infrastructure probe and
-metadata-only run history. It deliberately exposes no article-generation action.
+metadata-only run history. The content API exposes a separate Phase 4B preview/apply workflow;
+generation alone never changes an article revision.
 
 ## Commands
 
@@ -89,13 +90,13 @@ Unit tests do not need external services. Database and BullMQ integration tests 
 - **Prisma cannot connect:** local host commands use `localhost:5432`; containers use the Compose host `postgres:5432`.
 - **Queue remains waiting:** ensure `apps/worker` is running and points to the same Redis instance as the API.
 
-## Phase 4A scope
+## Phase 4B scope
 
-Implemented: all validated Phase 0–3B behavior plus an AI provider contract and registry,
-deterministic mock, versioned strict prompts, validated structured-output boundary, encrypted
-configuration at workspace/site/profile scope, bounded execution policy, usage/cost metadata and a
-small French administration screen.
+Implemented: all validated Phase 0–4A behavior plus `article.draft@1`, deterministic mock article
+output, a durable sanitized preview, explicit discard, and an idempotent/stale-safe apply action
+that creates one normal internal `ContentRevision` with AI provenance. The French editor clearly
+keeps the preview separate from saved content until human confirmation.
 
-Not implemented: article/content generation, research, fact verification, SEO engines, image generation,
+Not implemented: research, fact verification, article rewriting, SEO engines, image generation,
 automatic or scheduled public publishing, WordPress, affiliates, analytics or billing.
 Development fixtures are not production credentials or content.

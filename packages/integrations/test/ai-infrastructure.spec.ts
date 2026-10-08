@@ -47,6 +47,41 @@ describe('provider-neutral AI infrastructure', () => {
     ).toMatchObject({ ok: true });
   });
 
+  it('returns the versioned article draft shape deterministically', async () => {
+    const result = await new MockAiProvider().generate({
+      ...request,
+      model: 'mock-v1',
+      outputFormat: 'JSON',
+      systemInstructions: 'ARTICLE_DRAFT_SCHEMA_V1',
+    });
+    expect(JSON.parse(result.text)).toEqual({
+      title: 'Brouillon éditorial déterministe',
+      excerpt: 'Aperçu généré de manière déterministe pour validation humaine.',
+      bodyHtml:
+        '<h2>Brouillon contrôlé</h2><p>Ce contenu générique doit être relu avant toute utilisation.</p>',
+      suggestedSlug: 'brouillon-editorial-determine',
+      metaDescription: 'Brouillon éditorial déterministe destiné à une validation humaine.',
+      suggestedLabels: ['brouillon', 'validation'],
+      warnings: ['Vérifier les faits avant approbation.'],
+    });
+  });
+
+  it.each([
+    ['mock-malformed-structured', 'MALFORMED_STRUCTURED'],
+    ['mock-provider-error', 'PROVIDER_ERROR'],
+    ['mock-rate-limit', 'RATE_LIMIT'],
+  ] as const)('selects the safe %s test scenario from the mock model', async (model, scenario) => {
+    const provider = new MockAiProvider();
+    const operation = provider.generate({ ...request, model, outputFormat: 'JSON' });
+    if (scenario === 'MALFORMED_STRUCTURED') {
+      await expect(operation).resolves.toMatchObject({ text: '{not-json' });
+      return;
+    }
+    await expect(operation).rejects.toMatchObject({
+      code: scenario === 'RATE_LIMIT' ? 'AI_RATE_LIMITED' : 'AI_PROVIDER_ERROR',
+    });
+  });
+
   it('rejects malformed structured output with a normalized error', async () => {
     const result = await new MockAiProvider({ scenario: 'MALFORMED_STRUCTURED' }).generate({
       ...request,

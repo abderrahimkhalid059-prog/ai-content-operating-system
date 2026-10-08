@@ -1,4 +1,4 @@
-# API d’infrastructure IA — Phase 4A
+# API d’infrastructure et de génération contrôlée — Phases 4A et 4B
 
 Toutes les routes sont authentifiées, préfixées par
 `/api/v1/workspaces/:workspaceId/ai` et protégées par le contexte d’espace.
@@ -37,7 +37,15 @@ Une estimation est écrite uniquement lorsque le fournisseur retourne les deux c
 tarification est complète. `monthlyTokenLimit` constitue un garde-fou d’usage, pas une fonction de
 facturation.
 
+## Génération métier contrôlée
+
+Le service métier de contenu utilise la même résolution, le même chiffrement, les limites et les
+exécutions `AiRun`. Le prompt `article.draft@1` produit un objet JSON strict. La sortie est traitée
+comme non fiable, validée par liste blanche, bornée et assainie avant de devenir un aperçu durable.
+Les routes métier et leurs permissions sont documentées dans l’API de contenu.
+
 ## Limite de phase
 
 La sonde `CONFIGURATION_TEST` utilise le prompt interne versionné
-`infrastructure.configuration-probe@1`. Elle ne crée, ne réécrit et ne publie aucun contenu.
+`infrastructure.configuration-probe@1`. La génération Phase 4B ne recherche aucune source et ne
+publie rien. Elle ne modifie le contenu qu’après confirmation humaine via l’action d’application.

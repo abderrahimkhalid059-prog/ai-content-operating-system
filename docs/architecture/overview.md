@@ -64,3 +64,13 @@ external post identifiers server-side, then calls the existing `PublishingProvid
 Internal edits only make the association out of sync; a separate human action updates the same
 Blogger Draft. Confirmed missing drafts are never recreated automatically, authorization failures
 never become deletion, and reconnecting the same site preserves the association.
+
+## Phase 4B controlled article generation
+
+The Content module composes the Phase 4A provider-neutral runtime with Website, ContentProfile and
+ContentItem context. `article.draft@1` returns a strict structured draft. The API validates and
+sanitizes it, then stores a durable `AiGenerationCandidate`; it does not update ContentItem during
+generation. A separate permission-checked apply command uses a serializable optimistic transaction
+to claim the candidate, update the internal draft and create exactly one ordinary immutable
+revision with provenance. Stale candidates fail closed. This path cannot approve, publish, call
+Blogger, research the web or execute generated HTML.

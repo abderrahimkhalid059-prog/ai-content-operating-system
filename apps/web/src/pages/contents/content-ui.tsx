@@ -15,6 +15,7 @@ import { apiRequest, ApiClientError } from '../../api/client';
 import { useAuth } from '../../auth/auth-context';
 import { Loading } from '../../components/loading';
 import { ContentReviewPanel } from './content-review-panel';
+import { ArticleGenerationPanel } from './article-generation-panel';
 
 const editorialStatuses: ContentEditorialStatus[] = [
   'IDEA',
@@ -703,6 +704,18 @@ export function ContentEditorPage(): React.JSX.Element {
         </aside>
       </form>
       {persisted && (
+        <ArticleGenerationPanel
+          workspaceId={workspaceId}
+          websiteId={websiteId}
+          item={persisted}
+          contentProfileId={form.contentProfileId}
+          onApplied={async () => {
+            await invalidate(persisted.id);
+            setNotice('Brouillon IA enregistré comme nouvelle version interne.');
+          }}
+        />
+      )}
+      {persisted && (
         <ContentReviewPanel workspaceId={workspaceId} websiteId={websiteId} item={persisted} />
       )}
     </section>
@@ -756,6 +769,9 @@ export function ContentRevisionsPage(): React.JSX.Element {
                 {editorialLabels[revision.editorialStatus]} ·{' '}
                 {new Date(revision.changedAt).toLocaleString('fr-FR')}
               </span>
+              {revision.origin === 'AI_GENERATED' && (
+                <small>Origine : génération IA contrôlée</small>
+              )}
               {revision.changeReason && <small>{revision.changeReason}</small>}
             </button>
           ))}
@@ -773,6 +789,12 @@ export function ContentRevisionsPage(): React.JSX.Element {
               </dd>
               <dt>Libellés</dt>
               <dd>{detail.labels.join(', ') || 'Aucun'}</dd>
+              <dt>Origine</dt>
+              <dd>
+                {detail.origin === 'AI_GENERATED'
+                  ? `Génération IA · base ${detail.baseRevisionNumber ?? '—'}`
+                  : 'Modification manuelle'}
+              </dd>
             </dl>
             <pre>{detail.htmlContent}</pre>
           </article>

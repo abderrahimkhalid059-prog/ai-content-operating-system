@@ -166,55 +166,71 @@ enum AiErrorCategory {
   UNKNOWN
 }
 
+enum AiGenerationCandidateStatus {
+  PENDING
+  READY
+  FAILED
+  APPLIED
+  DISCARDED
+}
+
+enum ContentRevisionOrigin {
+  MANUAL
+  AI_GENERATED
+}
+
 model User {
-  id                   String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                String              @unique @db.VarChar(320)
-  displayName          String?             @map("display_name") @db.VarChar(120)
-  passwordHash         String              @map("password_hash") @db.VarChar(255)
-  status               UserStatus          @default(ACTIVE)
-  mustChangePassword   Boolean             @default(true) @map("must_change_password")
-  securityVersion      Int                 @default(1) @map("security_version")
-  lastLoginAt          DateTime?           @map("last_login_at") @db.Timestamptz(3)
-  passwordChangedAt    DateTime?           @map("password_changed_at") @db.Timestamptz(3)
-  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                   String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                String                  @unique @db.VarChar(320)
+  displayName          String?                 @map("display_name") @db.VarChar(120)
+  passwordHash         String                  @map("password_hash") @db.VarChar(255)
+  status               UserStatus              @default(ACTIVE)
+  mustChangePassword   Boolean                 @default(true) @map("must_change_password")
+  securityVersion      Int                     @default(1) @map("security_version")
+  lastLoginAt          DateTime?               @map("last_login_at") @db.Timestamptz(3)
+  passwordChangedAt    DateTime?               @map("password_changed_at") @db.Timestamptz(3)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
   workspaceMembers     WorkspaceMember[]
   sessions             Session[]
-  auditLogs            AuditLog[]          @relation("AuditActor")
-  connectedProviders   WebsiteConnection[] @relation("ProviderConnectedBy")
-  oauthStates          OAuthState[]        @relation("OAuthStateUser")
-  createdContentItems  ContentItem[]       @relation("ContentCreatedBy")
-  assignedContentItems ContentItem[]       @relation("ContentAssignedTo")
-  contentRevisions     ContentRevision[]   @relation("ContentRevisionChangedBy")
-  contentComments      ContentComment[]    @relation("ContentCommentAuthor")
-  resolvedComments     ContentComment[]    @relation("ContentCommentResolver")
-  contentReviews       ContentReview[]     @relation("ContentReviewer")
+  auditLogs            AuditLog[]              @relation("AuditActor")
+  connectedProviders   WebsiteConnection[]     @relation("ProviderConnectedBy")
+  oauthStates          OAuthState[]            @relation("OAuthStateUser")
+  createdContentItems  ContentItem[]           @relation("ContentCreatedBy")
+  assignedContentItems ContentItem[]           @relation("ContentAssignedTo")
+  contentRevisions     ContentRevision[]       @relation("ContentRevisionChangedBy")
+  contentComments      ContentComment[]        @relation("ContentCommentAuthor")
+  resolvedComments     ContentComment[]        @relation("ContentCommentResolver")
+  contentReviews       ContentReview[]         @relation("ContentReviewer")
+  createdAiCandidates  AiGenerationCandidate[] @relation("AiCandidateCreatedBy")
+  appliedAiCandidates  AiGenerationCandidate[] @relation("AiCandidateAppliedBy")
 
   @@map("users")
 }
 
 model Workspace {
-  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name                String               @db.VarChar(120)
-  slug                String               @unique @db.VarChar(100)
-  isActive            Boolean              @default(true) @map("is_active")
-  deactivatedAt       DateTime?            @map("deactivated_at") @db.Timestamptz(3)
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  members             WorkspaceMember[]
-  websites            Website[]
-  settings            SystemSetting[]
-  auditLogs           AuditLog[]
-  jobRecords          JobRecord[]
-  websiteConnections  WebsiteConnection[]
-  oauthStates         OAuthState[]
-  contentItems        ContentItem[]
-  contentRevisions    ContentRevision[]
-  contentComments     ContentComment[]
-  contentReviews      ContentReview[]
-  contentPublications ContentPublication[]
-  aiConfigurations    AiConfiguration[]
-  aiRuns              AiRun[]
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                   String                  @db.VarChar(120)
+  slug                   String                  @unique @db.VarChar(100)
+  isActive               Boolean                 @default(true) @map("is_active")
+  deactivatedAt          DateTime?               @map("deactivated_at") @db.Timestamptz(3)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members                WorkspaceMember[]
+  websites               Website[]
+  settings               SystemSetting[]
+  auditLogs              AuditLog[]
+  jobRecords             JobRecord[]
+  websiteConnections     WebsiteConnection[]
+  oauthStates            OAuthState[]
+  contentItems           ContentItem[]
+  contentRevisions       ContentRevision[]
+  contentComments        ContentComment[]
+  contentReviews         ContentReview[]
+  contentPublications    ContentPublication[]
+  aiConfigurations       AiConfiguration[]
+  aiRuns                 AiRun[]
+  aiGenerationCandidates AiGenerationCandidate[]
 
   @@map("workspaces")
 }
@@ -235,32 +251,33 @@ model WorkspaceMember {
 }
 
 model Website {
-  id                  String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId         String               @map("workspace_id") @db.Uuid
-  name                String               @db.VarChar(160)
-  slug                String               @db.VarChar(120)
-  platform            WebsitePlatform
-  language            String               @db.VarChar(10)
-  locale              String?              @db.VarChar(35)
-  timezone            String               @db.VarChar(64)
-  description         String?              @db.VarChar(1000)
-  status              WebsiteStatus        @default(DRAFT)
-  deletedAt           DateTime?            @map("deleted_at") @db.Timestamptz(3)
-  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace           Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  auditLogs           AuditLog[]
-  jobRecords          JobRecord[]
-  contentProfiles     ContentProfile[]
-  connections         WebsiteConnection[]
-  oauthStates         OAuthState[]
-  contentItems        ContentItem[]
-  contentRevisions    ContentRevision[]
-  contentComments     ContentComment[]
-  contentReviews      ContentReview[]
-  contentPublications ContentPublication[]
-  aiConfigurations    AiConfiguration[]
-  aiRuns              AiRun[]
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId            String                  @map("workspace_id") @db.Uuid
+  name                   String                  @db.VarChar(160)
+  slug                   String                  @db.VarChar(120)
+  platform               WebsitePlatform
+  language               String                  @db.VarChar(10)
+  locale                 String?                 @db.VarChar(35)
+  timezone               String                  @db.VarChar(64)
+  description            String?                 @db.VarChar(1000)
+  status                 WebsiteStatus           @default(DRAFT)
+  deletedAt              DateTime?               @map("deleted_at") @db.Timestamptz(3)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace              Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  auditLogs              AuditLog[]
+  jobRecords             JobRecord[]
+  contentProfiles        ContentProfile[]
+  connections            WebsiteConnection[]
+  oauthStates            OAuthState[]
+  contentItems           ContentItem[]
+  contentRevisions       ContentRevision[]
+  contentComments        ContentComment[]
+  contentReviews         ContentReview[]
+  contentPublications    ContentPublication[]
+  aiConfigurations       AiConfiguration[]
+  aiRuns                 AiRun[]
+  aiGenerationCandidates AiGenerationCandidate[]
 
   @@unique([workspaceId, slug])
   @@unique([id, workspaceId])
@@ -329,25 +346,26 @@ model Session {
 }
 
 model ContentProfile {
-  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId      String               @map("workspace_id") @db.Uuid
-  websiteId        String               @map("website_id") @db.Uuid
-  name             String               @db.VarChar(160)
-  language         String               @db.VarChar(10)
-  locale           String?              @db.VarChar(35)
-  countryCode      String?              @map("country_code") @db.Char(2)
-  tone             String               @db.VarChar(300)
-  targetAudience   String?              @map("target_audience") @db.VarChar(500)
-  editorialRules   Json                 @map("editorial_rules")
-  prohibitedTopics Json?                @map("prohibited_topics")
-  isDefault        Boolean              @default(false) @map("is_default")
-  status           ContentProfileStatus @default(ACTIVE)
-  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
-  website          Website              @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  contentItems     ContentItem[]
-  aiConfigurations AiConfiguration[]
-  aiRuns           AiRun[]
+  id                     String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId            String                  @map("workspace_id") @db.Uuid
+  websiteId              String                  @map("website_id") @db.Uuid
+  name                   String                  @db.VarChar(160)
+  language               String                  @db.VarChar(10)
+  locale                 String?                 @db.VarChar(35)
+  countryCode            String?                 @map("country_code") @db.Char(2)
+  tone                   String                  @db.VarChar(300)
+  targetAudience         String?                 @map("target_audience") @db.VarChar(500)
+  editorialRules         Json                    @map("editorial_rules")
+  prohibitedTopics       Json?                   @map("prohibited_topics")
+  isDefault              Boolean                 @default(false) @map("is_default")
+  status                 ContentProfileStatus    @default(ACTIVE)
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  website                Website                 @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItems           ContentItem[]
+  aiConfigurations       AiConfiguration[]
+  aiRuns                 AiRun[]
+  aiGenerationCandidates AiGenerationCandidate[]
 
   @@unique([websiteId, name])
   @@unique([id, workspaceId, websiteId])
@@ -392,6 +410,7 @@ model ContentItem {
   comments                ContentComment[]
   reviews                 ContentReview[]
   publications            ContentPublication[]
+  aiGenerationCandidates  AiGenerationCandidate[]
 
   @@unique([workspaceId, websiteId, slug])
   @@unique([id, workspaceId, websiteId])
@@ -430,14 +449,21 @@ model ContentRevision {
   changedByUserId         String                   @map("changed_by_user_id") @db.Uuid
   changeReason            String?                  @map("change_reason") @db.VarChar(500)
   changedAt               DateTime                 @default(now()) @map("changed_at") @db.Timestamptz(3)
+  origin                  ContentRevisionOrigin    @default(MANUAL)
+  aiRunId                 String?                  @map("ai_run_id") @db.Uuid
+  aiGenerationCandidateId String?                  @unique @map("ai_generation_candidate_id") @db.Uuid
+  baseRevisionNumber      Int?                     @map("base_revision_number")
   contentItem             ContentItem              @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
   workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   website                 Website                  @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   changedBy               User                     @relation("ContentRevisionChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
   reviews                 ContentReview[]
+  aiRun                   AiRun?                   @relation("AiRunGeneratedRevision", fields: [aiRunId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  aiGenerationCandidate   AiGenerationCandidate?   @relation(fields: [aiGenerationCandidateId, workspaceId, websiteId, contentItemId], references: [id, workspaceId, websiteId, contentItemId], onDelete: Restrict)
 
   @@unique([contentItemId, revisionNumber])
   @@unique([id, workspaceId, websiteId, contentItemId], map: "content_revisions_id_workspace_id_website_id_content_item_id_ke")
+  @@unique([aiGenerationCandidateId, workspaceId, websiteId, contentItemId], map: "content_revisions_ai_candidate_scope_key")
   @@index([workspaceId, websiteId, contentItemId, revisionNumber], map: "content_revisions_workspace_id_website_id_content_item_id_revis")
   @@map("content_revisions")
 }
@@ -739,38 +765,84 @@ model AiConfiguration {
 }
 
 model AiRun {
-  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  workspaceId         String           @map("workspace_id") @db.Uuid
-  websiteId           String?          @map("website_id") @db.Uuid
-  contentProfileId    String?          @map("content_profile_id") @db.Uuid
-  configurationId     String?          @map("configuration_id") @db.Uuid
-  idempotencyKey      String           @map("idempotency_key") @db.VarChar(160)
-  providerKey         String           @map("provider_key") @db.VarChar(80)
-  model               String           @db.VarChar(160)
-  operation           String           @db.VarChar(120)
-  promptIdentifier    String           @map("prompt_identifier") @db.VarChar(120)
-  promptVersion       Int              @map("prompt_version")
-  correlationId       String           @map("correlation_id") @db.VarChar(128)
-  status              AiRunStatus      @default(RUNNING)
-  startedAt           DateTime         @default(now()) @map("started_at") @db.Timestamptz(3)
-  completedAt         DateTime?        @map("completed_at") @db.Timestamptz(3)
-  latencyMs           Int?             @map("latency_ms")
-  retryCount          Int              @default(0) @map("retry_count")
-  inputTokens         Int?             @map("input_tokens")
-  outputTokens        Int?             @map("output_tokens")
-  totalTokens         Int?             @map("total_tokens")
-  estimatedCostMicros Int?             @map("estimated_cost_micros")
-  costCurrency        String?          @map("cost_currency") @db.Char(3)
-  errorCategory       AiErrorCategory? @map("error_category")
-  errorCode           String?          @map("error_code") @db.VarChar(120)
-  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  website             Website?         @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
-  contentProfile      ContentProfile?  @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
-  configuration       AiConfiguration? @relation(fields: [configurationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  id                  String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId         String                 @map("workspace_id") @db.Uuid
+  websiteId           String?                @map("website_id") @db.Uuid
+  contentProfileId    String?                @map("content_profile_id") @db.Uuid
+  configurationId     String?                @map("configuration_id") @db.Uuid
+  idempotencyKey      String                 @map("idempotency_key") @db.VarChar(160)
+  providerKey         String                 @map("provider_key") @db.VarChar(80)
+  model               String                 @db.VarChar(160)
+  operation           String                 @db.VarChar(120)
+  promptIdentifier    String                 @map("prompt_identifier") @db.VarChar(120)
+  promptVersion       Int                    @map("prompt_version")
+  correlationId       String                 @map("correlation_id") @db.VarChar(128)
+  status              AiRunStatus            @default(RUNNING)
+  startedAt           DateTime               @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt         DateTime?              @map("completed_at") @db.Timestamptz(3)
+  latencyMs           Int?                   @map("latency_ms")
+  retryCount          Int                    @default(0) @map("retry_count")
+  inputTokens         Int?                   @map("input_tokens")
+  outputTokens        Int?                   @map("output_tokens")
+  totalTokens         Int?                   @map("total_tokens")
+  estimatedCostMicros Int?                   @map("estimated_cost_micros")
+  costCurrency        String?                @map("cost_currency") @db.Char(3)
+  errorCategory       AiErrorCategory?       @map("error_category")
+  errorCode           String?                @map("error_code") @db.VarChar(120)
+  workspace           Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website             Website?               @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentProfile      ContentProfile?        @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  configuration       AiConfiguration?       @relation(fields: [configurationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  generationCandidate AiGenerationCandidate? @relation("AiRunGenerationCandidate")
+  generatedRevisions  ContentRevision[]      @relation("AiRunGeneratedRevision")
 
   @@unique([workspaceId, idempotencyKey])
+  @@unique([id, workspaceId])
   @@index([workspaceId, startedAt])
   @@index([workspaceId, websiteId, contentProfileId, startedAt])
   @@index([status, startedAt])
   @@map("ai_runs")
+}
+
+model AiGenerationCandidate {
+  id                    String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId           String                      @map("workspace_id") @db.Uuid
+  websiteId             String                      @map("website_id") @db.Uuid
+  contentItemId         String                      @map("content_item_id") @db.Uuid
+  contentProfileId      String                      @map("content_profile_id") @db.Uuid
+  aiRunId               String?                     @unique @map("ai_run_id") @db.Uuid
+  createdByUserId       String                      @map("created_by_user_id") @db.Uuid
+  appliedByUserId       String?                     @map("applied_by_user_id") @db.Uuid
+  status                AiGenerationCandidateStatus @default(PENDING)
+  idempotencyKey        String                      @map("idempotency_key") @db.VarChar(160)
+  baseRevisionNumber    Int                         @map("base_revision_number")
+  promptIdentifier      String                      @map("prompt_identifier") @db.VarChar(120)
+  promptVersion         Int                         @map("prompt_version")
+  title                 String?                     @db.VarChar(300)
+  excerpt               String?                     @db.VarChar(1000)
+  htmlContent           String?                     @map("html_content") @db.Text
+  suggestedSlug         String?                     @map("suggested_slug") @db.VarChar(120)
+  metaDescription       String?                     @map("meta_description") @db.VarChar(180)
+  suggestedLabels       Json?                       @map("suggested_labels")
+  warnings              Json?
+  errorCode             String?                     @map("error_code") @db.VarChar(120)
+  appliedRevisionNumber Int?                        @map("applied_revision_number")
+  appliedAt             DateTime?                   @map("applied_at") @db.Timestamptz(3)
+  createdAt             DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace             Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  website               Website                     @relation(fields: [websiteId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  contentItem           ContentItem                 @relation(fields: [contentItemId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Cascade)
+  contentProfile        ContentProfile              @relation(fields: [contentProfileId, workspaceId, websiteId], references: [id, workspaceId, websiteId], onDelete: Restrict)
+  aiRun                 AiRun?                      @relation("AiRunGenerationCandidate", fields: [aiRunId, workspaceId], references: [id, workspaceId], onDelete: Restrict)
+  createdBy             User                        @relation("AiCandidateCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  appliedBy             User?                       @relation("AiCandidateAppliedBy", fields: [appliedByUserId], references: [id], onDelete: Restrict)
+  appliedRevision       ContentRevision?
+
+  @@unique([id, workspaceId, websiteId, contentItemId])
+  @@unique([workspaceId, idempotencyKey])
+  @@unique([aiRunId, workspaceId])
+  @@index([workspaceId, websiteId, contentItemId, status, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@map("ai_generation_candidates")
 }
